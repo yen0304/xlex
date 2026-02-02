@@ -1,0 +1,7 @@
+# Clippy configuration
+disallowed-names = ["foo", "bar", "baz", "quux"]
+cognitive-complexity-threshold = 25
+
+[dependencies]
+# Allow mutable reference in return type for builders
+allow-private-mutable-refs = true

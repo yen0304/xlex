@@ -1,0 +1,42 @@
+[package]
+name = "xlex-cli"
+description = "CLI tool for XLEX - A streaming Excel manipulation engine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["excel", "xlsx", "cli", "spreadsheet", "automation"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "xlex"
+path = "src/main.rs"
+
+[dependencies]
+xlex-core = { path = "../xlex-core" }
+
+# CLI
+clap = { workspace = true }
+clap_complete = { workspace = true }
+colored = { workspace = true }
+indicatif = { workspace = true }
+console = { workspace = true }
+dialoguer = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+csv = { workspace = true }
+
+# Utils
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+dirs = { workspace = true }
+regex-lite = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

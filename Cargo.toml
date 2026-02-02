@@ -1,0 +1,57 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/xlex-core",
+    "crates/xlex-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["XLEX Contributors"]
+license = "MIT"
+repository = "https://github.com/xlex/xlex"
+homepage = "https://xlex.sh"
+documentation = "https://docs.xlex.sh"
+readme = "README.md"
+keywords = ["excel", "xlsx", "cli", "spreadsheet", "automation"]
+categories = ["command-line-utilities", "parser-implementations"]
+
+[workspace.dependencies]
+# Core dependencies
+zip = "2.1"
+quick-xml = "0.36"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# CLI dependencies
+clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }
+clap_complete = "4.5"
+colored = "2.1"
+indicatif = "0.17"
+console = "0.15"
+dialoguer = "0.11"
+
+# Async / IO
+tokio = { version = "1.0", features = ["full"] }
+
+# Utils
+thiserror = "1.0"
+anyhow = "1.0"
+lru = "0.12"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4"] }
+regex = "1.10"
+regex-lite = "0.1"
+handlebars = "6.0"
+csv = "1.3"
+dirs = "5.0"
+
+# Testing
+tempfile = "3.10"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

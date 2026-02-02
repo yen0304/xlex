@@ -1,0 +1,9 @@
+.github/prompts/
+.claude/
+
+#Rust files
+*.rs.bk
+target/
+
+#VsCode files
+.vscode/

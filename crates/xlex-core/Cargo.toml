@@ -1,0 +1,26 @@
+[package]
+name = "xlex-core"
+description = "Core library for XLEX - A streaming Excel manipulation engine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["excel", "xlsx", "spreadsheet", "parser"]
+categories = ["parser-implementations", "data-structures"]
+
+[dependencies]
+zip = { workspace = true }
+quick-xml = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+lru = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+regex = { workspace = true }
+handlebars = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
