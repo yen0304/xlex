@@ -49,7 +49,7 @@ pub enum BorderStyle {
 }
 
 /// A color value.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Color {
     /// RGB color (0xRRGGBB)
     Rgb(u32),
@@ -58,6 +58,7 @@ pub enum Color {
     /// Indexed color
     Indexed(u32),
     /// Auto color (black for text, white for background)
+    #[default]
     Auto,
 }
 
@@ -101,14 +102,8 @@ impl Color {
     }
 }
 
-impl Default for Color {
-    fn default() -> Self {
-        Self::Auto
-    }
-}
-
 /// Font style.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Font {
     /// Font name (e.g., "Arial", "Calibri")
     pub name: Option<String>,
@@ -124,20 +119,6 @@ pub struct Font {
     pub strikethrough: bool,
     /// Font color
     pub color: Option<Color>,
-}
-
-impl Default for Font {
-    fn default() -> Self {
-        Self {
-            name: None,
-            size: None,
-            bold: false,
-            italic: false,
-            underline: false,
-            strikethrough: false,
-            color: None,
-        }
-    }
 }
 
 /// Fill pattern type.

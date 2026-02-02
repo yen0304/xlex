@@ -6,9 +6,7 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 
 use crate::error::{XlexError, XlexResult};
-use crate::style::{
-    Border, BorderStyle, Fill, FillPattern, Font, StyleRegistry,
-};
+use crate::style::{Border, BorderStyle, Fill, FillPattern, Font, StyleRegistry};
 
 /// Parser for styles.xml.
 pub struct StylesParser;
@@ -40,113 +38,103 @@ impl StylesParser {
 
         loop {
             match xml_reader.read_event_into(&mut buf) {
-                Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
-                    match e.name().as_ref() {
-                        b"font" => {
-                            current_font = Some(Font::default());
-                        }
-                        b"name" if current_font.is_some() => {
-                            if let Some(ref mut font) = current_font {
-                                for attr in e.attributes().flatten() {
-                                    if attr.key.as_ref() == b"val" {
-                                        font.name = Some(
-                                            String::from_utf8_lossy(&attr.value).to_string(),
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        b"sz" if current_font.is_some() => {
-                            if let Some(ref mut font) = current_font {
-                                for attr in e.attributes().flatten() {
-                                    if attr.key.as_ref() == b"val" {
-                                        font.size = String::from_utf8_lossy(&attr.value)
-                                            .parse()
-                                            .ok();
-                                    }
-                                }
-                            }
-                        }
-                        b"b" if current_font.is_some() => {
-                            if let Some(ref mut font) = current_font {
-                                font.bold = true;
-                            }
-                        }
-                        b"i" if current_font.is_some() => {
-                            if let Some(ref mut font) = current_font {
-                                font.italic = true;
-                            }
-                        }
-                        b"u" if current_font.is_some() => {
-                            if let Some(ref mut font) = current_font {
-                                font.underline = true;
-                            }
-                        }
-                        b"strike" if current_font.is_some() => {
-                            if let Some(ref mut font) = current_font {
-                                font.strikethrough = true;
-                            }
-                        }
-                        b"fill" => {
-                            current_fill = Some(Fill::default());
-                        }
-                        b"patternFill" if current_fill.is_some() => {
-                            if let Some(ref mut fill) = current_fill {
-                                for attr in e.attributes().flatten() {
-                                    if attr.key.as_ref() == b"patternType" {
-                                        fill.pattern = parse_fill_pattern(
-                                            &String::from_utf8_lossy(&attr.value),
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        b"border" => {
-                            current_border = Some(Border::default());
-                        }
-                        b"numFmt" => {
-                            let mut id: Option<u32> = None;
-                            let mut code: Option<String> = None;
+                Ok(Event::Start(e)) | Ok(Event::Empty(e)) => match e.name().as_ref() {
+                    b"font" => {
+                        current_font = Some(Font::default());
+                    }
+                    b"name" if current_font.is_some() => {
+                        if let Some(ref mut font) = current_font {
                             for attr in e.attributes().flatten() {
-                                match attr.key.as_ref() {
-                                    b"numFmtId" => {
-                                        id = String::from_utf8_lossy(&attr.value).parse().ok();
-                                    }
-                                    b"formatCode" => {
-                                        code = Some(
-                                            String::from_utf8_lossy(&attr.value).to_string(),
-                                        );
-                                    }
-                                    _ => {}
+                                if attr.key.as_ref() == b"val" {
+                                    font.name =
+                                        Some(String::from_utf8_lossy(&attr.value).to_string());
                                 }
                             }
-                            if let (Some(id), Some(code)) = (id, code) {
-                                num_fmts.insert(id, code);
-                            }
                         }
-                        _ => {}
                     }
-                }
-                Ok(Event::End(e)) => {
-                    match e.name().as_ref() {
-                        b"font" => {
-                            if let Some(font) = current_font.take() {
-                                fonts.push(font);
+                    b"sz" if current_font.is_some() => {
+                        if let Some(ref mut font) = current_font {
+                            for attr in e.attributes().flatten() {
+                                if attr.key.as_ref() == b"val" {
+                                    font.size = String::from_utf8_lossy(&attr.value).parse().ok();
+                                }
                             }
                         }
-                        b"fill" => {
-                            if let Some(fill) = current_fill.take() {
-                                fills.push(fill);
-                            }
-                        }
-                        b"border" => {
-                            if let Some(border) = current_border.take() {
-                                borders.push(border);
-                            }
-                        }
-                        _ => {}
                     }
-                }
+                    b"b" if current_font.is_some() => {
+                        if let Some(ref mut font) = current_font {
+                            font.bold = true;
+                        }
+                    }
+                    b"i" if current_font.is_some() => {
+                        if let Some(ref mut font) = current_font {
+                            font.italic = true;
+                        }
+                    }
+                    b"u" if current_font.is_some() => {
+                        if let Some(ref mut font) = current_font {
+                            font.underline = true;
+                        }
+                    }
+                    b"strike" if current_font.is_some() => {
+                        if let Some(ref mut font) = current_font {
+                            font.strikethrough = true;
+                        }
+                    }
+                    b"fill" => {
+                        current_fill = Some(Fill::default());
+                    }
+                    b"patternFill" if current_fill.is_some() => {
+                        if let Some(ref mut fill) = current_fill {
+                            for attr in e.attributes().flatten() {
+                                if attr.key.as_ref() == b"patternType" {
+                                    fill.pattern =
+                                        parse_fill_pattern(&String::from_utf8_lossy(&attr.value));
+                                }
+                            }
+                        }
+                    }
+                    b"border" => {
+                        current_border = Some(Border::default());
+                    }
+                    b"numFmt" => {
+                        let mut id: Option<u32> = None;
+                        let mut code: Option<String> = None;
+                        for attr in e.attributes().flatten() {
+                            match attr.key.as_ref() {
+                                b"numFmtId" => {
+                                    id = String::from_utf8_lossy(&attr.value).parse().ok();
+                                }
+                                b"formatCode" => {
+                                    code = Some(String::from_utf8_lossy(&attr.value).to_string());
+                                }
+                                _ => {}
+                            }
+                        }
+                        if let (Some(id), Some(code)) = (id, code) {
+                            num_fmts.insert(id, code);
+                        }
+                    }
+                    _ => {}
+                },
+                Ok(Event::End(e)) => match e.name().as_ref() {
+                    b"font" => {
+                        if let Some(font) = current_font.take() {
+                            fonts.push(font);
+                        }
+                    }
+                    b"fill" => {
+                        if let Some(fill) = current_fill.take() {
+                            fills.push(fill);
+                        }
+                    }
+                    b"border" => {
+                        if let Some(border) = current_border.take() {
+                            borders.push(border);
+                        }
+                    }
+                    _ => {}
+                },
                 Ok(Event::Eof) => break,
                 Err(e) => {
                     return Err(XlexError::InvalidXml {

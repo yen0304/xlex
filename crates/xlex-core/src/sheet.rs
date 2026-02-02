@@ -315,7 +315,7 @@ impl Sheet {
     }
 
     /// Inserts a row at the specified position, shifting all rows below down by one.
-    /// 
+    ///
     /// # Arguments
     /// * `row` - The row number (1-based) where the new row will be inserted
     /// * `count` - Number of rows to insert (default 1)
@@ -389,7 +389,7 @@ impl Sheet {
     }
 
     /// Deletes rows starting at the specified position, shifting all rows below up.
-    /// 
+    ///
     /// # Arguments
     /// * `row` - The row number (1-based) where deletion starts
     /// * `count` - Number of rows to delete (default 1)
@@ -489,7 +489,7 @@ impl Sheet {
     }
 
     /// Inserts columns at the specified position, shifting all columns to the right.
-    /// 
+    ///
     /// # Arguments
     /// * `col` - The column number (1-based) where the new columns will be inserted
     /// * `count` - Number of columns to insert (default 1)
@@ -563,7 +563,7 @@ impl Sheet {
     }
 
     /// Deletes columns starting at the specified position, shifting all columns to the left.
-    /// 
+    ///
     /// # Arguments
     /// * `col` - The column number (1-based) where deletion starts
     /// * `count` - Number of columns to delete (default 1)
@@ -761,10 +761,19 @@ mod tests {
         sheet.insert_rows(2, 1);
 
         // Verify cells shifted
-        assert_eq!(sheet.get_value(&CellRef::new(1, 1)), CellValue::string("A1"));
+        assert_eq!(
+            sheet.get_value(&CellRef::new(1, 1)),
+            CellValue::string("A1")
+        );
         assert_eq!(sheet.get_value(&CellRef::new(1, 2)), CellValue::Empty); // New empty row
-        assert_eq!(sheet.get_value(&CellRef::new(1, 3)), CellValue::string("A2"));
-        assert_eq!(sheet.get_value(&CellRef::new(1, 4)), CellValue::string("A3"));
+        assert_eq!(
+            sheet.get_value(&CellRef::new(1, 3)),
+            CellValue::string("A2")
+        );
+        assert_eq!(
+            sheet.get_value(&CellRef::new(1, 4)),
+            CellValue::string("A3")
+        );
 
         // Verify row properties shifted
         assert_eq!(sheet.get_row_height(3), Some(25.0));
@@ -786,9 +795,18 @@ mod tests {
         sheet.delete_rows(2, 1);
 
         // Verify cells shifted
-        assert_eq!(sheet.get_value(&CellRef::new(1, 1)), CellValue::string("A1"));
-        assert_eq!(sheet.get_value(&CellRef::new(1, 2)), CellValue::string("A3"));
-        assert_eq!(sheet.get_value(&CellRef::new(1, 3)), CellValue::string("A4"));
+        assert_eq!(
+            sheet.get_value(&CellRef::new(1, 1)),
+            CellValue::string("A1")
+        );
+        assert_eq!(
+            sheet.get_value(&CellRef::new(1, 2)),
+            CellValue::string("A3")
+        );
+        assert_eq!(
+            sheet.get_value(&CellRef::new(1, 3)),
+            CellValue::string("A4")
+        );
         assert_eq!(sheet.cell_count(), 3);
 
         // Verify row height shifted
@@ -810,10 +828,19 @@ mod tests {
         sheet.insert_columns(2, 1);
 
         // Verify cells shifted
-        assert_eq!(sheet.get_value(&CellRef::new(1, 1)), CellValue::string("A1"));
+        assert_eq!(
+            sheet.get_value(&CellRef::new(1, 1)),
+            CellValue::string("A1")
+        );
         assert_eq!(sheet.get_value(&CellRef::new(2, 1)), CellValue::Empty); // New empty column
-        assert_eq!(sheet.get_value(&CellRef::new(3, 1)), CellValue::string("B1"));
-        assert_eq!(sheet.get_value(&CellRef::new(4, 1)), CellValue::string("C1"));
+        assert_eq!(
+            sheet.get_value(&CellRef::new(3, 1)),
+            CellValue::string("B1")
+        );
+        assert_eq!(
+            sheet.get_value(&CellRef::new(4, 1)),
+            CellValue::string("C1")
+        );
 
         // Verify column properties shifted
         assert_eq!(sheet.get_column_width(3), Some(20.0));
@@ -835,9 +862,18 @@ mod tests {
         sheet.delete_columns(2, 1);
 
         // Verify cells shifted
-        assert_eq!(sheet.get_value(&CellRef::new(1, 1)), CellValue::string("A1"));
-        assert_eq!(sheet.get_value(&CellRef::new(2, 1)), CellValue::string("C1"));
-        assert_eq!(sheet.get_value(&CellRef::new(3, 1)), CellValue::string("D1"));
+        assert_eq!(
+            sheet.get_value(&CellRef::new(1, 1)),
+            CellValue::string("A1")
+        );
+        assert_eq!(
+            sheet.get_value(&CellRef::new(2, 1)),
+            CellValue::string("C1")
+        );
+        assert_eq!(
+            sheet.get_value(&CellRef::new(3, 1)),
+            CellValue::string("D1")
+        );
         assert_eq!(sheet.cell_count(), 3);
 
         // Verify column width shifted

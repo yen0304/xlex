@@ -48,14 +48,16 @@ impl Range {
             if start_str.chars().all(|c| c.is_ascii_alphabetic())
                 && end_str.chars().all(|c| c.is_ascii_alphabetic())
             {
-                let start_col =
-                    CellRef::col_from_letters_pub(start_str).ok_or_else(|| XlexError::InvalidRange {
+                let start_col = CellRef::col_from_letters_pub(start_str).ok_or_else(|| {
+                    XlexError::InvalidRange {
                         range: s.to_string(),
-                    })?;
-                let end_col =
-                    CellRef::col_from_letters_pub(end_str).ok_or_else(|| XlexError::InvalidRange {
+                    }
+                })?;
+                let end_col = CellRef::col_from_letters_pub(end_str).ok_or_else(|| {
+                    XlexError::InvalidRange {
                         range: s.to_string(),
-                    })?;
+                    }
+                })?;
 
                 if start_col > end_col {
                     return Err(XlexError::InvalidRange {
@@ -73,12 +75,9 @@ impl Range {
             if start_str.chars().all(|c| c.is_ascii_digit())
                 && end_str.chars().all(|c| c.is_ascii_digit())
             {
-                let start_row: u32 =
-                    start_str
-                        .parse()
-                        .map_err(|_| XlexError::InvalidRange {
-                            range: s.to_string(),
-                        })?;
+                let start_row: u32 = start_str.parse().map_err(|_| XlexError::InvalidRange {
+                    range: s.to_string(),
+                })?;
                 let end_row: u32 = end_str.parse().map_err(|_| XlexError::InvalidRange {
                     range: s.to_string(),
                 })?;

@@ -94,7 +94,8 @@ impl WorkbookWriter {
     ) -> XlexResult<()> {
         zip.start_file("[Content_Types].xml", options)?;
 
-        let mut content = String::from(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        let mut content = String::from(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
     <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
     <Default Extension="xml" ContentType="application/xml"/>
@@ -102,7 +103,8 @@ impl WorkbookWriter {
     <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
     <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
     <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
-"#);
+"#,
+        );
 
         // Add shared strings if present
         if !workbook.shared_strings().is_empty() {
@@ -167,9 +169,11 @@ impl WorkbookWriter {
         zip.start_file("docProps/core.xml", options)?;
 
         let props = workbook.properties();
-        let mut content = String::from(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        let mut content = String::from(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-"#);
+"#,
+        );
 
         if let Some(ref title) = props.title {
             content.push_str(&format!("    <dc:title>{}</dc:title>\n", escape_xml(title)));
@@ -218,9 +222,11 @@ impl WorkbookWriter {
     ) -> XlexResult<()> {
         zip.start_file("xl/_rels/workbook.xml.rels", options)?;
 
-        let mut content = String::from(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        let mut content = String::from(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-"#);
+"#,
+        );
 
         // Add sheet relationships
         for (index, _) in workbook.sheet_names().iter().enumerate() {
@@ -263,10 +269,12 @@ impl WorkbookWriter {
     ) -> XlexResult<()> {
         zip.start_file("xl/workbook.xml", options)?;
 
-        let mut content = String::from(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        let mut content = String::from(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
     <sheets>
-"#);
+"#,
+        );
 
         for (index, name) in workbook.sheet_names().iter().enumerate() {
             let visibility = workbook.get_sheet_visibility(name).unwrap_or_default();
@@ -390,25 +398,27 @@ impl WorkbookWriter {
         sheet_number: usize,
         options: SimpleFileOptions,
     ) -> XlexResult<()> {
-        let sheet = workbook.get_sheet(sheet_name).ok_or_else(|| XlexError::SheetNotFound {
-            name: sheet_name.to_string(),
-        })?;
+        let sheet = workbook
+            .get_sheet(sheet_name)
+            .ok_or_else(|| XlexError::SheetNotFound {
+                name: sheet_name.to_string(),
+            })?;
 
         zip.start_file(format!("xl/worksheets/sheet{}.xml", sheet_number), options)?;
 
-        let mut content = String::from(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        let mut content = String::from(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
     <sheetData>
-"#);
+"#,
+        );
 
         // Collect cells by row
         let mut rows: std::collections::BTreeMap<u32, Vec<&crate::cell::Cell>> =
             std::collections::BTreeMap::new();
 
         for cell in sheet.cells() {
-            rows.entry(cell.reference.row)
-                .or_default()
-                .push(cell);
+            rows.entry(cell.reference.row).or_default().push(cell);
         }
 
         // Write rows
@@ -423,7 +433,9 @@ impl WorkbookWriter {
                 let cell_ref = cell.reference.to_a1();
                 let (cell_type, cell_value) = self.format_cell_value(&cell.value);
 
-                let type_attr = cell_type.map(|t| format!(r#" t="{}""#, t)).unwrap_or_default();
+                let type_attr = cell_type
+                    .map(|t| format!(r#" t="{}""#, t))
+                    .unwrap_or_default();
                 let style_attr = cell
                     .style_id
                     .map(|s| format!(r#" s="{}""#, s))
@@ -437,7 +449,9 @@ impl WorkbookWriter {
                             type_attr,
                             style_attr,
                             escape_xml(formula),
-                            cell_value.map(|v| format!("<v>{}</v>", v)).unwrap_or_default()
+                            cell_value
+                                .map(|v| format!("<v>{}</v>", v))
+                                .unwrap_or_default()
                         ));
                     }
                     CellValue::Empty => {
@@ -457,8 +471,10 @@ impl WorkbookWriter {
             content.push_str("</row>\n");
         }
 
-        content.push_str(r#"    </sheetData>
-</worksheet>"#);
+        content.push_str(
+            r#"    </sheetData>
+</worksheet>"#,
+        );
 
         zip.write_all(content.as_bytes())?;
         Ok(())

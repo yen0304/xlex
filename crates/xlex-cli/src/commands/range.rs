@@ -474,11 +474,12 @@ fn range_style(
     let style_id = workbook.style_registry_mut().add(style);
 
     {
-        let sheet_obj = workbook
-            .get_sheet_mut(sheet)
-            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-                name: sheet.to_string(),
-            })?;
+        let sheet_obj =
+            workbook
+                .get_sheet_mut(sheet)
+                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                    name: sheet.to_string(),
+                })?;
 
         // Apply style to each cell in range
         for row in range_ref.start.row..=range_ref.end.row {
@@ -591,15 +592,15 @@ fn range_border(
             // Create style with border
             let mut style = Style::default();
             style.border = cell_border;
-            
+
             // Register style and apply to cell
             let style_id = workbook.style_registry_mut().add(style);
-            
-            let sheet_obj = workbook
-                .get_sheet_mut(sheet)
-                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+
+            let sheet_obj = workbook.get_sheet_mut(sheet).ok_or_else(|| {
+                xlex_core::XlexError::SheetNotFound {
                     name: sheet.to_string(),
-                })?;
+                }
+            })?;
             sheet_obj.set_cell_style(&cell_ref, Some(style_id));
         }
     }
@@ -608,24 +609,25 @@ fn range_border(
 
     if !global.quiet {
         let action = if opts.none { "Removed" } else { "Applied" };
-        println!("{} {} borders on range {}", "✓".green(), action, range.cyan());
+        println!(
+            "{} {} borders on range {}",
+            "✓".green(),
+            action,
+            range.cyan()
+        );
     }
     Ok(())
 }
 
-fn get(
-    file: &std::path::Path,
-    sheet: &str,
-    range: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn get(file: &std::path::Path, sheet: &str, range: &str, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let range_ref = Range::parse(range)?;
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     let mut rows: Vec<Vec<serde_json::Value>> = Vec::new();
 
@@ -678,7 +680,11 @@ fn get(
                     _ => v.to_string(),
                 })
                 .collect();
-            println!("{}: {}", format!("Row {}", row_num).cyan(), values.join(" | "));
+            println!(
+                "{}: {}",
+                format!("Row {}", row_num).cyan(),
+                values.join(" | ")
+            );
         }
     }
 
@@ -701,11 +707,12 @@ fn copy(
     let source_range = Range::parse(source)?;
     let dest_cell = xlex_core::CellRef::parse(dest)?;
 
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // Collect source values
     let mut values: Vec<(u32, u32, xlex_core::CellValue)> = Vec::new();
@@ -724,17 +731,16 @@ fn copy(
     let _ = sheet_obj;
 
     // Paste values to destination
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     for (col_offset, row_offset, value) in values {
-        let dest_ref = xlex_core::CellRef::new(
-            dest_cell.col + col_offset,
-            dest_cell.row + row_offset,
-        );
+        let dest_ref =
+            xlex_core::CellRef::new(dest_cell.col + col_offset, dest_cell.row + row_offset);
         sheet_obj.set_cell(dest_ref, value);
     }
 
@@ -764,11 +770,12 @@ fn move_range(
     let source_range = Range::parse(source)?;
     let dest_cell = xlex_core::CellRef::parse(dest)?;
 
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // Collect source values
     let mut values: Vec<(u32, u32, xlex_core::CellValue)> = Vec::new();
@@ -784,11 +791,12 @@ fn move_range(
     }
     let _ = sheet_obj;
 
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // Clear source range
     for row_offset in 0..=(source_range.end.row - source_range.start.row) {
@@ -804,10 +812,8 @@ fn move_range(
     // Paste values to destination
     for (col_offset, row_offset, value) in values {
         if !value.is_empty() {
-            let dest_ref = xlex_core::CellRef::new(
-                dest_cell.col + col_offset,
-                dest_cell.row + row_offset,
-            );
+            let dest_ref =
+                xlex_core::CellRef::new(dest_cell.col + col_offset, dest_cell.row + row_offset);
             sheet_obj.set_cell(dest_ref, value);
         }
     }
@@ -874,18 +880,17 @@ fn fill(
 
     if !global.quiet {
         let count = range_ref.cell_count();
-        println!("Filled {} cells in {}", count.to_string().green(), range.cyan());
+        println!(
+            "Filled {} cells in {}",
+            count.to_string().green(),
+            range.cyan()
+        );
     }
 
     Ok(())
 }
 
-fn merge(
-    file: &std::path::Path,
-    sheet: &str,
-    range: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn merge(file: &std::path::Path, sheet: &str, range: &str, global: &GlobalOptions) -> Result<()> {
     if global.dry_run {
         println!("Would merge range {} in {}", range, sheet);
         return Ok(());
@@ -894,11 +899,12 @@ fn merge(
     let mut workbook = Workbook::open(file)?;
     let range_ref = Range::parse(range)?;
 
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     sheet_obj.add_merged_range(range_ref);
     let _ = sheet_obj;
@@ -911,12 +917,7 @@ fn merge(
     Ok(())
 }
 
-fn unmerge(
-    file: &std::path::Path,
-    sheet: &str,
-    range: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn unmerge(file: &std::path::Path, sheet: &str, range: &str, global: &GlobalOptions) -> Result<()> {
     if global.dry_run {
         println!("Would unmerge range {} in {}", range, sheet);
         return Ok(());
@@ -925,11 +926,12 @@ fn unmerge(
     let mut workbook = Workbook::open(file)?;
     let range_ref = Range::parse(range)?;
 
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     sheet_obj.remove_merged_range(&range_ref);
     let _ = sheet_obj;
@@ -971,12 +973,7 @@ fn name(
     };
 
     // Get sheet index for local scope
-    let local_sheet_id = sheet.and_then(|s| {
-        workbook
-            .sheet_names()
-            .iter()
-            .position(|n| *n == s)
-    });
+    let local_sheet_id = sheet.and_then(|s| workbook.sheet_names().iter().position(|n| *n == s));
 
     let defined_name = DefinedName {
         name: name.to_string(),
@@ -1060,11 +1057,12 @@ fn validate(
 ) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let range_ref = Range::parse(range)?;
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     let mut valid = true;
     let mut errors: Vec<String> = Vec::new();
@@ -1080,9 +1078,7 @@ fn validate(
                 }
             }
             "numeric" => {
-                if !matches!(value, xlex_core::CellValue::Number(_))
-                    && !value.is_empty()
-                {
+                if !matches!(value, xlex_core::CellValue::Number(_)) && !value.is_empty() {
                     valid = false;
                     errors.push(format!("{} is not numeric", cell_ref.to_a1()));
                 }
@@ -1144,11 +1140,12 @@ fn sort(
         None => 0, // First column
     };
 
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // Collect all rows as tuples of (sort_key, row_data)
     let mut rows: Vec<(xlex_core::CellValue, Vec<(u32, xlex_core::CellValue)>)> = Vec::new();
@@ -1184,11 +1181,12 @@ fn sort(
     });
 
     // Write back sorted data
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     for (row_idx, (_, row_data)) in rows.iter().enumerate() {
         let target_row = range_ref.start.row + row_idx as u32;
@@ -1206,7 +1204,11 @@ fn sort(
     workbook.save()?;
 
     if !global.quiet {
-        let order = if descending { "descending" } else { "ascending" };
+        let order = if descending {
+            "descending"
+        } else {
+            "ascending"
+        };
         println!("Sorted range {} ({})", range.cyan(), order);
     }
 
@@ -1254,11 +1256,12 @@ fn filter(
         anyhow::bail!("Filter column {} is outside range {}", column, range);
     }
 
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // Find rows matching the filter
     let mut matching_rows: Vec<u32> = Vec::new();
@@ -1300,7 +1303,10 @@ fn filter(
         });
         println!("{}", serde_json::to_string_pretty(&json)?);
     } else {
-        println!("Found {} matching rows:", matching_rows.len().to_string().green());
+        println!(
+            "Found {} matching rows:",
+            matching_rows.len().to_string().green()
+        );
         for row in &matching_rows {
             let mut values: Vec<String> = Vec::new();
             for col in range_ref.start.col..=range_ref.end.col {
@@ -1308,7 +1314,11 @@ fn filter(
                 let val = sheet_obj.get_value(&cell_ref);
                 values.push(val.to_display_string());
             }
-            println!("  {}: {}", format!("Row {}", row).cyan(), values.join(" | "));
+            println!(
+                "  {}: {}",
+                format!("Row {}", row).cyan(),
+                values.join(" | ")
+            );
         }
     }
 

@@ -50,10 +50,7 @@ pub fn info(args: &InfoArgs, global: &GlobalOptions) -> Result<()> {
             println!("  {}. {}{}", i + 1, name, vis_str);
         }
 
-        if props.title.is_some()
-            || props.creator.is_some()
-            || props.subject.is_some()
-        {
+        if props.title.is_some() || props.creator.is_some() || props.subject.is_some() {
             println!("\n{}:", "Properties".bold());
             if let Some(ref title) = props.title {
                 println!("  {}: {}", "Title".cyan(), title);
@@ -200,7 +197,11 @@ pub fn create(args: &CreateArgs, global: &GlobalOptions) -> Result<()> {
     };
 
     if global.dry_run {
-        println!("Would create {} with sheets: {:?}", args.file.display(), sheet_names);
+        println!(
+            "Would create {} with sheets: {:?}",
+            args.file.display(),
+            sheet_names
+        );
         return Ok(());
     }
 
@@ -326,7 +327,12 @@ pub fn props(args: &PropsArgs, global: &GlobalOptions) -> Result<()> {
             value,
         } => {
             if global.dry_run {
-                println!("Would set {} to '{}' in {}", property, value, file.display());
+                println!(
+                    "Would set {} to '{}' in {}",
+                    property,
+                    value,
+                    file.display()
+                );
                 return Ok(());
             }
 
@@ -377,11 +383,7 @@ pub fn stats(args: &StatsArgs, global: &GlobalOptions) -> Result<()> {
         println!("  {}: {}", "Styles".cyan(), stats.style_count);
         println!("  {}: {}", "Shared Strings".cyan(), stats.string_count);
         if stats.file_size > 0 {
-            println!(
-                "  {}: {} bytes",
-                "File Size".cyan(),
-                stats.file_size
-            );
+            println!("  {}: {} bytes", "File Size".cyan(), stats.file_size);
         }
     }
 

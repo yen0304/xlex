@@ -129,10 +129,11 @@ impl FromStr for CellRef {
 }
 
 /// The value of a cell.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(tag = "type", content = "value")]
 pub enum CellValue {
     /// Empty cell
+    #[default]
     Empty,
     /// String value
     String(String),
@@ -212,12 +213,6 @@ impl CellValue {
             Self::Error(e) => e.to_string(),
             Self::DateTime(serial) => format!("{}", serial), // TODO: Format as date
         }
-    }
-}
-
-impl Default for CellValue {
-    fn default() -> Self {
-        Self::Empty
     }
 }
 

@@ -152,15 +152,6 @@ impl WorkbookParser {
         Ok(props)
     }
 
-    /// Parses workbook.xml to extract sheet information.
-    fn parse_workbook_xml<R: Read + Seek>(
-        &self,
-        archive: &mut ZipArchive<R>,
-    ) -> XlexResult<Vec<SheetInfo>> {
-        let (sheets, _) = self.parse_workbook_xml_full(archive)?;
-        Ok(sheets)
-    }
-
     /// Parses workbook.xml to extract sheet information and defined names.
     fn parse_workbook_xml_full<R: Read + Seek>(
         &self,
@@ -190,9 +181,8 @@ impl WorkbookParser {
                                 name = String::from_utf8_lossy(&attr.value).to_string();
                             }
                             b"sheetId" => {
-                                sheet_id = String::from_utf8_lossy(&attr.value)
-                                    .parse()
-                                    .unwrap_or(0);
+                                sheet_id =
+                                    String::from_utf8_lossy(&attr.value).parse().unwrap_or(0);
                             }
                             b"state" => {
                                 let state = String::from_utf8_lossy(&attr.value);
@@ -228,9 +218,7 @@ impl WorkbookParser {
                                 name = String::from_utf8_lossy(&attr.value).to_string();
                             }
                             b"localSheetId" => {
-                                local_sheet_id = String::from_utf8_lossy(&attr.value)
-                                    .parse()
-                                    .ok();
+                                local_sheet_id = String::from_utf8_lossy(&attr.value).parse().ok();
                             }
                             b"comment" => {
                                 comment = Some(String::from_utf8_lossy(&attr.value).to_string());
@@ -372,9 +360,8 @@ impl WorkbookParser {
                                             Some(String::from_utf8_lossy(&attr.value).to_string());
                                     }
                                     b"s" => {
-                                        current_cell_style = String::from_utf8_lossy(&attr.value)
-                                            .parse()
-                                            .ok();
+                                        current_cell_style =
+                                            String::from_utf8_lossy(&attr.value).parse().ok();
                                     }
                                     _ => {}
                                 }
@@ -399,11 +386,9 @@ impl WorkbookParser {
                 }
                 Ok(Event::Text(e)) => {
                     if in_value {
-                        current_value
-                            .push_str(&e.unescape().unwrap_or_default());
+                        current_value.push_str(&e.unescape().unwrap_or_default());
                     } else if in_formula {
-                        current_formula
-                            .push_str(&e.unescape().unwrap_or_default());
+                        current_formula.push_str(&e.unescape().unwrap_or_default());
                     }
                 }
                 Ok(Event::End(e)) => {

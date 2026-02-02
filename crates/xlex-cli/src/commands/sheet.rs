@@ -103,11 +103,23 @@ pub enum SheetCommand {
 pub fn run(args: &SheetArgs, global: &GlobalOptions) -> Result<()> {
     match &args.command {
         SheetCommand::List { file } => list(file, global),
-        SheetCommand::Add { file, name, position } => add(file, name, *position, global),
+        SheetCommand::Add {
+            file,
+            name,
+            position,
+        } => add(file, name, *position, global),
         SheetCommand::Remove { file, name } => remove(file, name, global),
-        SheetCommand::Rename { file, old_name, new_name } => rename(file, old_name, new_name, global),
+        SheetCommand::Rename {
+            file,
+            old_name,
+            new_name,
+        } => rename(file, old_name, new_name, global),
         SheetCommand::Copy { file, source, dest } => copy(file, source, dest, global),
-        SheetCommand::Move { file, name, position } => move_sheet(file, name, *position, global),
+        SheetCommand::Move {
+            file,
+            name,
+            position,
+        } => move_sheet(file, name, *position, global),
         SheetCommand::Hide { file, name, very } => hide(file, name, *very, global),
         SheetCommand::Unhide { file, name } => unhide(file, name, global),
         SheetCommand::Info { file, name } => info(file, name, global),
@@ -245,14 +257,14 @@ fn rename(
     Ok(())
 }
 
-fn copy(
-    file: &std::path::Path,
-    source: &str,
-    dest: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn copy(file: &std::path::Path, source: &str, dest: &str, global: &GlobalOptions) -> Result<()> {
     if global.dry_run {
-        println!("Would copy sheet '{}' to '{}' in {}", source, dest, file.display());
+        println!(
+            "Would copy sheet '{}' to '{}' in {}",
+            source,
+            dest,
+            file.display()
+        );
         return Ok(());
     }
 
@@ -287,7 +299,9 @@ fn move_sheet(
     if global.dry_run {
         println!(
             "Would move sheet '{}' to position {} in {}",
-            name, position, file.display()
+            name,
+            position,
+            file.display()
         );
         return Ok(());
     }
@@ -303,12 +317,7 @@ fn move_sheet(
     Ok(())
 }
 
-fn hide(
-    file: &std::path::Path,
-    name: &str,
-    very: bool,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn hide(file: &std::path::Path, name: &str, very: bool, global: &GlobalOptions) -> Result<()> {
     if global.dry_run {
         println!("Would hide sheet '{}' in {}", name, file.display());
         return Ok(());
@@ -381,11 +390,7 @@ fn info(file: &std::path::Path, name: &str, global: &GlobalOptions) -> Result<()
     Ok(())
 }
 
-fn active(
-    file: &std::path::Path,
-    name: Option<&str>,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn active(file: &std::path::Path, name: Option<&str>, global: &GlobalOptions) -> Result<()> {
     if let Some(name) = name {
         if global.dry_run {
             println!("Would set active sheet to '{}' in {}", name, file.display());

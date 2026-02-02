@@ -3,7 +3,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use std::collections::HashMap;
 
 use xlex_core::{CellRef, CellValue, Workbook};
 
@@ -25,11 +24,17 @@ pub enum TemplateCommand {
         /// Output file
         output: std::path::PathBuf,
         /// Variable file (JSON or YAML)
-        #[arg(short, long)]
+        #[arg(long)]
         vars: Option<std::path::PathBuf>,
         /// Inline variable (key=value)
         #[arg(short = 'D', long = "define")]
         define: Vec<String>,
+        /// Generate one file per record (for array data)
+        #[arg(long)]
+        per_record: bool,
+        /// Output pattern for per-record mode (e.g., "output_{index}.xlsx")
+        #[arg(long)]
+        output_pattern: Option<String>,
     },
     /// Initialize a new template with example placeholders
     Init {
@@ -49,7 +54,7 @@ pub enum TemplateCommand {
         /// Template xlsx file
         template: std::path::PathBuf,
         /// Variable file (JSON or YAML)
-        #[arg(short, long)]
+        #[arg(long)]
         vars: Option<std::path::PathBuf>,
         /// Generate JSON schema for required data
         #[arg(long)]
@@ -70,7 +75,7 @@ pub enum TemplateCommand {
         /// Template xlsx file
         template: std::path::PathBuf,
         /// Variable file (JSON or YAML)
-        #[arg(short, long)]
+        #[arg(long)]
         vars: Option<std::path::PathBuf>,
         /// Inline variable (key=value)
         #[arg(short = 'D', long = "define")]
@@ -86,15 +91,27 @@ pub fn run(args: &TemplateArgs, global: &GlobalOptions) -> Result<()> {
             output,
             vars,
             define,
-        } => apply(template, output, vars.as_deref(), define, global),
+            per_record,
+            output_pattern,
+        } => apply(
+            template,
+            output,
+            vars.as_deref(),
+            define,
+            *per_record,
+            output_pattern.as_deref(),
+            global,
+        ),
         TemplateCommand::Init {
             output,
             template_type,
         } => init(output, template_type, global),
         TemplateCommand::List { template } => list(template, global),
-        TemplateCommand::Validate { template, vars, schema } => {
-            validate(template, vars.as_deref(), *schema, global)
-        }
+        TemplateCommand::Validate {
+            template,
+            vars,
+            schema,
+        } => validate(template, vars.as_deref(), *schema, global),
         TemplateCommand::Create {
             source,
             output,
@@ -113,6 +130,8 @@ fn apply(
     output: &std::path::Path,
     vars_file: Option<&std::path::Path>,
     defines: &[String],
+    per_record: bool,
+    output_pattern: Option<&str>,
     global: &GlobalOptions,
 ) -> Result<()> {
     if global.dry_run {
@@ -125,66 +144,58 @@ fn apply(
     }
 
     // Load variables
-    let mut vars: HashMap<String, String> = HashMap::new();
+    let vars = load_template_vars(vars_file, defines)?;
 
-    // Load from file
-    if let Some(path) = vars_file {
-        let content = std::fs::read_to_string(path)?;
-        if path.extension().map(|e| e == "json").unwrap_or(false) {
-            let json: serde_json::Value = serde_json::from_str(&content)?;
-            if let serde_json::Value::Object(obj) = json {
-                for (k, v) in obj {
-                    vars.insert(k, value_to_string(&v));
-                }
-            }
-        } else {
-            let yaml: serde_yaml::Value = serde_yaml::from_str(&content)?;
-            if let serde_yaml::Value::Mapping(map) = yaml {
-                for (k, v) in map {
-                    if let serde_yaml::Value::String(key) = k {
-                        vars.insert(key, yaml_value_to_string(&v));
-                    }
-                }
-            }
-        }
+    // Handle per-record mode for batch processing
+    if per_record {
+        return apply_per_record(template, output, output_pattern, &vars, global);
     }
 
-    // Add inline defines (override file vars)
-    for define in defines {
-        if let Some((key, value)) = define.split_once('=') {
-            vars.insert(key.to_string(), value.to_string());
-        }
-    }
+    // Single file processing with advanced template features
+    apply_single(template, output, &vars, global)
+}
 
-    // Open template and process
+/// Apply template to generate a single output file.
+fn apply_single(
+    template: &std::path::Path,
+    output: &std::path::Path,
+    vars: &TemplateVars,
+    global: &GlobalOptions,
+) -> Result<()> {
     let mut workbook = Workbook::open(template)?;
 
-    let sheet_names: Vec<String> = workbook.sheet_names().iter().map(|s| s.to_string()).collect();
-    for sheet_name in sheet_names {
-        // Collect cell data we need before releasing the borrow
-        let cells_to_update: Vec<(CellRef, String)> = if let Some(sheet) = workbook.get_sheet(&sheet_name) {
-            sheet.cells()
-                .filter_map(|cell| {
-                    if let CellValue::String(s) = &cell.value {
-                        let new_value = replace_placeholders(s, &vars);
-                        if new_value != *s {
-                            return Some((cell.reference.clone(), new_value));
-                        }
-                    }
-                    None
-                })
-                .collect()
-        } else {
-            continue;
-        };
+    let sheet_names: Vec<String> = workbook
+        .sheet_names()
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
-        // Now apply the updates
+    for sheet_name in sheet_names {
+        // First, handle row-repeat markers
+        process_row_repeats(&mut workbook, &sheet_name, vars)?;
+
+        // Then, process all cells for placeholders
+        let cells_to_update: Vec<(CellRef, String)> =
+            if let Some(sheet) = workbook.get_sheet(&sheet_name) {
+                sheet
+                    .cells()
+                    .filter_map(|cell| {
+                        if let CellValue::String(s) = &cell.value {
+                            let new_value = process_template_string(s, vars);
+                            if new_value != *s {
+                                return Some((cell.reference.clone(), new_value));
+                            }
+                        }
+                        None
+                    })
+                    .collect()
+            } else {
+                continue;
+            };
+
+        // Apply the updates
         for (cell_ref, new_value) in cells_to_update {
-            workbook.set_cell(
-                &sheet_name,
-                cell_ref,
-                CellValue::String(new_value),
-            )?;
+            workbook.set_cell(&sheet_name, cell_ref, CellValue::String(new_value))?;
         }
     }
 
@@ -200,13 +211,93 @@ fn apply(
     Ok(())
 }
 
-fn init(
+/// Apply template per-record for batch processing.
+fn apply_per_record(
+    template: &std::path::Path,
     output: &std::path::Path,
-    template_type: &str,
+    output_pattern: Option<&str>,
+    vars: &TemplateVars,
     global: &GlobalOptions,
 ) -> Result<()> {
+    // Check if vars contains an array (records)
+    let records = vars
+        .get_array("records")
+        .or_else(|| vars.get_array("items"))
+        .or_else(|| vars.get_array("data"));
+
+    let records = match records {
+        Some(r) => r,
+        None => {
+            anyhow::bail!("Per-record mode requires an array named 'records', 'items', or 'data' in the variables");
+        }
+    };
+
+    let pattern = output_pattern.unwrap_or("{name}_{index}.xlsx");
+    let output_dir = output.parent().unwrap_or(std::path::Path::new("."));
+    let base_name = output
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output");
+
+    let mut generated_files = Vec::new();
+
+    for (index, record) in records.iter().enumerate() {
+        // Create vars for this record
+        let mut record_vars = vars.clone();
+        record_vars.merge_object(record);
+        record_vars.set("index", &(index + 1).to_string());
+        record_vars.set("index0", &index.to_string());
+
+        // Generate output filename
+        let output_name = pattern
+            .replace("{index}", &(index + 1).to_string())
+            .replace("{index0}", &index.to_string())
+            .replace("{name}", base_name);
+
+        let output_path = output_dir.join(&output_name);
+
+        apply_single(
+            template,
+            &output_path,
+            &record_vars,
+            &GlobalOptions {
+                quiet: true,
+                ..global.clone()
+            },
+        )?;
+
+        generated_files.push(output_path);
+    }
+
+    if !global.quiet {
+        if global.format == OutputFormat::Json {
+            let json = serde_json::json!({
+                "generated": generated_files.iter().map(|p| p.display().to_string()).collect::<Vec<_>>(),
+                "count": generated_files.len(),
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            println!(
+                "{} Generated {} files from template",
+                "✓".green(),
+                generated_files.len().to_string().cyan()
+            );
+            for path in &generated_files {
+                println!("  - {}", path.display().to_string().yellow());
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn init(output: &std::path::Path, template_type: &str, global: &GlobalOptions) -> Result<()> {
     if global.dry_run {
-        println!("Would create {} template at {}", template_type, output.display());
+        println!(
+            "Would create {} template at {}",
+            template_type,
+            output.display()
+        );
         return Ok(());
     }
 
@@ -221,57 +312,174 @@ fn init(
         "report" => {
             // Create a report template
             let sheet = workbook.get_sheet_mut("Sheet1").unwrap();
-            sheet.set_cell(CellRef::parse("A1")?, CellValue::String("{{title}}".to_string()));
-            sheet.set_cell(CellRef::parse("A2")?, CellValue::String("Date: {{date}}".to_string()));
-            sheet.set_cell(CellRef::parse("A3")?, CellValue::String("Author: {{author}}".to_string()));
-            sheet.set_cell(CellRef::parse("A5")?, CellValue::String("Summary".to_string()));
-            sheet.set_cell(CellRef::parse("A6")?, CellValue::String("{{summary}}".to_string()));
+            sheet.set_cell(
+                CellRef::parse("A1")?,
+                CellValue::String("{{title}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A2")?,
+                CellValue::String("Date: {{date}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A3")?,
+                CellValue::String("Author: {{author}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A5")?,
+                CellValue::String("Summary".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A6")?,
+                CellValue::String("{{summary}}".to_string()),
+            );
             sheet.set_cell(CellRef::parse("A8")?, CellValue::String("Item".to_string()));
-            sheet.set_cell(CellRef::parse("B8")?, CellValue::String("Value".to_string()));
-            sheet.set_cell(CellRef::parse("A9")?, CellValue::String("{{item1_name}}".to_string()));
-            sheet.set_cell(CellRef::parse("B9")?, CellValue::String("{{item1_value}}".to_string()));
-            sheet.set_cell(CellRef::parse("A10")?, CellValue::String("{{item2_name}}".to_string()));
-            sheet.set_cell(CellRef::parse("B10")?, CellValue::String("{{item2_value}}".to_string()));
+            sheet.set_cell(
+                CellRef::parse("B8")?,
+                CellValue::String("Value".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A9")?,
+                CellValue::String("{{item1_name}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("B9")?,
+                CellValue::String("{{item1_value}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A10")?,
+                CellValue::String("{{item2_name}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("B10")?,
+                CellValue::String("{{item2_value}}".to_string()),
+            );
         }
         "invoice" => {
             // Create an invoice template
             let sheet = workbook.get_sheet_mut("Sheet1").unwrap();
-            sheet.set_cell(CellRef::parse("A1")?, CellValue::String("INVOICE".to_string()));
-            sheet.set_cell(CellRef::parse("A3")?, CellValue::String("Invoice #: {{invoice_number}}".to_string()));
-            sheet.set_cell(CellRef::parse("A4")?, CellValue::String("Date: {{invoice_date}}".to_string()));
-            sheet.set_cell(CellRef::parse("A6")?, CellValue::String("Bill To:".to_string()));
-            sheet.set_cell(CellRef::parse("A7")?, CellValue::String("{{customer_name}}".to_string()));
-            sheet.set_cell(CellRef::parse("A8")?, CellValue::String("{{customer_address}}".to_string()));
-            sheet.set_cell(CellRef::parse("A10")?, CellValue::String("Description".to_string()));
+            sheet.set_cell(
+                CellRef::parse("A1")?,
+                CellValue::String("INVOICE".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A3")?,
+                CellValue::String("Invoice #: {{invoice_number}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A4")?,
+                CellValue::String("Date: {{invoice_date}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A6")?,
+                CellValue::String("Bill To:".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A7")?,
+                CellValue::String("{{customer_name}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A8")?,
+                CellValue::String("{{customer_address}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A10")?,
+                CellValue::String("Description".to_string()),
+            );
             sheet.set_cell(CellRef::parse("B10")?, CellValue::String("Qty".to_string()));
-            sheet.set_cell(CellRef::parse("C10")?, CellValue::String("Price".to_string()));
-            sheet.set_cell(CellRef::parse("D10")?, CellValue::String("Total".to_string()));
-            sheet.set_cell(CellRef::parse("A11")?, CellValue::String("{{line1_desc}}".to_string()));
-            sheet.set_cell(CellRef::parse("B11")?, CellValue::String("{{line1_qty}}".to_string()));
-            sheet.set_cell(CellRef::parse("C11")?, CellValue::String("{{line1_price}}".to_string()));
-            sheet.set_cell(CellRef::parse("D11")?, CellValue::String("{{line1_total}}".to_string()));
-            sheet.set_cell(CellRef::parse("C14")?, CellValue::String("Subtotal:".to_string()));
-            sheet.set_cell(CellRef::parse("D14")?, CellValue::String("{{subtotal}}".to_string()));
-            sheet.set_cell(CellRef::parse("C15")?, CellValue::String("Tax:".to_string()));
-            sheet.set_cell(CellRef::parse("D15")?, CellValue::String("{{tax}}".to_string()));
-            sheet.set_cell(CellRef::parse("C16")?, CellValue::String("Total:".to_string()));
-            sheet.set_cell(CellRef::parse("D16")?, CellValue::String("{{total}}".to_string()));
+            sheet.set_cell(
+                CellRef::parse("C10")?,
+                CellValue::String("Price".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("D10")?,
+                CellValue::String("Total".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A11")?,
+                CellValue::String("{{line1_desc}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("B11")?,
+                CellValue::String("{{line1_qty}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("C11")?,
+                CellValue::String("{{line1_price}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("D11")?,
+                CellValue::String("{{line1_total}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("C14")?,
+                CellValue::String("Subtotal:".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("D14")?,
+                CellValue::String("{{subtotal}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("C15")?,
+                CellValue::String("Tax:".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("D15")?,
+                CellValue::String("{{tax}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("C16")?,
+                CellValue::String("Total:".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("D16")?,
+                CellValue::String("{{total}}".to_string()),
+            );
         }
         "data" => {
             // Create a simple data template
             let sheet = workbook.get_sheet_mut("Sheet1").unwrap();
-            sheet.set_cell(CellRef::parse("A1")?, CellValue::String("{{header1}}".to_string()));
-            sheet.set_cell(CellRef::parse("B1")?, CellValue::String("{{header2}}".to_string()));
-            sheet.set_cell(CellRef::parse("C1")?, CellValue::String("{{header3}}".to_string()));
-            sheet.set_cell(CellRef::parse("A2")?, CellValue::String("{{row1_col1}}".to_string()));
-            sheet.set_cell(CellRef::parse("B2")?, CellValue::String("{{row1_col2}}".to_string()));
-            sheet.set_cell(CellRef::parse("C2")?, CellValue::String("{{row1_col3}}".to_string()));
-            sheet.set_cell(CellRef::parse("A3")?, CellValue::String("{{row2_col1}}".to_string()));
-            sheet.set_cell(CellRef::parse("B3")?, CellValue::String("{{row2_col2}}".to_string()));
-            sheet.set_cell(CellRef::parse("C3")?, CellValue::String("{{row2_col3}}".to_string()));
+            sheet.set_cell(
+                CellRef::parse("A1")?,
+                CellValue::String("{{header1}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("B1")?,
+                CellValue::String("{{header2}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("C1")?,
+                CellValue::String("{{header3}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A2")?,
+                CellValue::String("{{row1_col1}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("B2")?,
+                CellValue::String("{{row1_col2}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("C2")?,
+                CellValue::String("{{row1_col3}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("A3")?,
+                CellValue::String("{{row2_col1}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("B3")?,
+                CellValue::String("{{row2_col2}}".to_string()),
+            );
+            sheet.set_cell(
+                CellRef::parse("C3")?,
+                CellValue::String("{{row2_col3}}".to_string()),
+            );
         }
         _ => {
-            anyhow::bail!("Unknown template type: {}. Use: report, invoice, or data", template_type);
+            anyhow::bail!(
+                "Unknown template type: {}. Use: report, invoice, or data",
+                template_type
+            );
         }
     }
 
@@ -291,8 +499,14 @@ fn init(
                 template_type.cyan(),
                 output.display().to_string().yellow()
             );
-            println!("\nUse {} to see placeholders", "xlex template list <file>".dimmed());
-            println!("Use {} to apply variables", "xlex template apply <template> <output> -D key=value".dimmed());
+            println!(
+                "\nUse {} to see placeholders",
+                "xlex template list <file>".dimmed()
+            );
+            println!(
+                "Use {} to apply variables",
+                "xlex template apply <template> <output> -D key=value".dimmed()
+            );
         }
     }
 
@@ -321,10 +535,7 @@ fn list(template: &std::path::Path, global: &GlobalOptions) -> Result<()> {
     }
 
     // Get unique placeholder names
-    let mut unique: Vec<String> = placeholders
-        .iter()
-        .map(|(_, _, p)| p.clone())
-        .collect();
+    let mut unique: Vec<String> = placeholders.iter().map(|(_, _, p)| p.clone()).collect();
     unique.sort();
     unique.dedup();
 
@@ -398,14 +609,14 @@ fn validate(
                 }),
             );
         }
-        
+
         let schema = serde_json::json!({
             "$schema": "http://json-schema.org/draft-07/schema#",
             "type": "object",
             "properties": properties,
             "required": placeholders,
         });
-        
+
         println!("{}", serde_json::to_string_pretty(&schema)?);
         return Ok(());
     }
@@ -431,10 +642,7 @@ fn validate(
         }
     }
 
-    let missing: Vec<_> = placeholders
-        .iter()
-        .filter(|p| !vars.contains(p))
-        .collect();
+    let missing: Vec<_> = placeholders.iter().filter(|p| !vars.contains(p)).collect();
 
     let unused: Vec<_> = vars.iter().filter(|v| !placeholders.contains(v)).collect();
 
@@ -474,48 +682,19 @@ fn preview(
     defines: &[String],
     global: &GlobalOptions,
 ) -> Result<()> {
-    // Load variables
-    let mut vars: HashMap<String, String> = HashMap::new();
-
-    // Load from file
-    if let Some(path) = vars_file {
-        let content = std::fs::read_to_string(path)?;
-        if path.extension().map(|e| e == "json").unwrap_or(false) {
-            let json: serde_json::Value = serde_json::from_str(&content)?;
-            if let serde_json::Value::Object(obj) = json {
-                for (k, v) in obj {
-                    vars.insert(k, value_to_string(&v));
-                }
-            }
-        } else {
-            let yaml: serde_yaml::Value = serde_yaml::from_str(&content)?;
-            if let serde_yaml::Value::Mapping(map) = yaml {
-                for (k, v) in map {
-                    if let serde_yaml::Value::String(key) = k {
-                        vars.insert(key, yaml_value_to_string(&v));
-                    }
-                }
-            }
-        }
-    }
-
-    // Add inline defines
-    for define in defines {
-        if let Some((key, value)) = define.split_once('=') {
-            vars.insert(key.to_string(), value.to_string());
-        }
-    }
+    // Load variables using the new template system
+    let vars = load_template_vars(vars_file, defines)?;
 
     let workbook = Workbook::open(template)?;
 
-    // Collect all replacements
+    // Collect all replacements using the advanced template processor
     let mut replacements: Vec<serde_json::Value> = Vec::new();
 
     for sheet_name in workbook.sheet_names() {
         if let Some(sheet) = workbook.get_sheet(sheet_name) {
             for cell in sheet.cells() {
                 if let CellValue::String(s) = &cell.value {
-                    let new_value = replace_placeholders(s, &vars);
+                    let new_value = process_template_string(s, &vars);
                     if new_value != *s {
                         replacements.push(serde_json::json!({
                             "sheet": sheet_name,
@@ -532,22 +711,11 @@ fn preview(
     if global.format == OutputFormat::Json {
         let json = serde_json::json!({
             "template": template.display().to_string(),
-            "variables": vars,
             "replacements": replacements,
         });
         println!("{}", serde_json::to_string_pretty(&json)?);
     } else {
         println!("{}: {}\n", "Template".bold(), template.display());
-        
-        if vars.is_empty() {
-            println!("{}", "No variables provided".yellow());
-        } else {
-            println!("{} ({})", "Variables".bold(), vars.len());
-            for (k, v) in &vars {
-                println!("  {} = {}", k.cyan(), v.green());
-            }
-            println!();
-        }
 
         if replacements.is_empty() {
             println!("{}", "No replacements would be made".dimmed());
@@ -592,11 +760,7 @@ fn create(
                 let parts: Vec<_> = cell_str.splitn(2, '!').collect();
                 (parts[0].to_string(), CellRef::parse(parts[1])?)
             } else {
-                let first_sheet = workbook
-                    .sheet_names()
-                    .first()
-                    .copied()
-                    .unwrap_or("Sheet1");
+                let first_sheet = workbook.sheet_names().first().copied().unwrap_or("Sheet1");
                 (first_sheet.to_string(), CellRef::parse(cell_str)?)
             };
 
@@ -621,40 +785,6 @@ fn create(
     Ok(())
 }
 
-fn find_placeholders(s: &str) -> Vec<String> {
-    let mut result = Vec::new();
-    let mut chars = s.chars().peekable();
-    let mut current = String::new();
-    let mut in_placeholder = false;
-
-    while let Some(c) = chars.next() {
-        if c == '{' && chars.peek() == Some(&'{') {
-            chars.next(); // consume second {
-            in_placeholder = true;
-            current.clear();
-        } else if c == '}' && in_placeholder && chars.peek() == Some(&'}') {
-            chars.next(); // consume second }
-            in_placeholder = false;
-            if !current.is_empty() {
-                result.push(current.clone());
-            }
-        } else if in_placeholder {
-            current.push(c);
-        }
-    }
-
-    result
-}
-
-fn replace_placeholders(s: &str, vars: &HashMap<String, String>) -> String {
-    let mut result = s.to_string();
-    for (key, value) in vars {
-        let placeholder = format!("{{{{{}}}}}", key);
-        result = result.replace(&placeholder, value);
-    }
-    result
-}
-
 fn value_to_string(v: &serde_json::Value) -> String {
     match v {
         serde_json::Value::String(s) => s.clone(),
@@ -665,20 +795,565 @@ fn value_to_string(v: &serde_json::Value) -> String {
     }
 }
 
-fn yaml_value_to_string(v: &serde_yaml::Value) -> String {
-    match v {
-        serde_yaml::Value::String(s) => s.clone(),
-        serde_yaml::Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                i.to_string()
-            } else if let Some(f) = n.as_f64() {
-                f.to_string()
-            } else {
-                String::new()
+// =============================================================================
+// Advanced Template Engine
+// =============================================================================
+
+/// Template variables container supporting nested access and arrays.
+#[derive(Clone, Debug, Default)]
+pub struct TemplateVars {
+    data: serde_json::Value,
+}
+
+impl TemplateVars {
+    pub fn new() -> Self {
+        Self {
+            data: serde_json::Value::Object(serde_json::Map::new()),
+        }
+    }
+
+    pub fn from_json(value: serde_json::Value) -> Self {
+        Self { data: value }
+    }
+
+    pub fn set(&mut self, key: &str, value: &str) {
+        if let serde_json::Value::Object(ref mut map) = self.data {
+            map.insert(
+                key.to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
+        }
+    }
+
+    pub fn get(&self, key: &str) -> Option<String> {
+        // Support dot notation for nested access (e.g., "user.name")
+        let parts: Vec<&str> = key.split('.').collect();
+        let mut current = &self.data;
+
+        for part in &parts {
+            match current {
+                serde_json::Value::Object(map) => {
+                    current = map.get(*part)?;
+                }
+                serde_json::Value::Array(arr) => {
+                    let idx: usize = part.parse().ok()?;
+                    current = arr.get(idx)?;
+                }
+                _ => return None,
             }
         }
-        serde_yaml::Value::Bool(b) => b.to_string(),
-        serde_yaml::Value::Null => String::new(),
-        _ => format!("{:?}", v),
+
+        Some(value_to_string(current))
     }
+
+    pub fn get_array(&self, key: &str) -> Option<Vec<serde_json::Value>> {
+        let parts: Vec<&str> = key.split('.').collect();
+        let mut current = &self.data;
+
+        for part in &parts {
+            match current {
+                serde_json::Value::Object(map) => {
+                    current = map.get(*part)?;
+                }
+                _ => return None,
+            }
+        }
+
+        if let serde_json::Value::Array(arr) = current {
+            Some(arr.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn get_bool(&self, key: &str) -> Option<bool> {
+        let parts: Vec<&str> = key.split('.').collect();
+        let mut current = &self.data;
+
+        for part in &parts {
+            if let serde_json::Value::Object(map) = current {
+                current = map.get(*part)?;
+            } else {
+                return None;
+            }
+        }
+
+        match current {
+            serde_json::Value::Bool(b) => Some(*b),
+            serde_json::Value::String(s) => match s.to_lowercase().as_str() {
+                "true" | "yes" | "1" => Some(true),
+                "false" | "no" | "0" => Some(false),
+                _ => Some(!s.is_empty()),
+            },
+            serde_json::Value::Number(n) => Some(n.as_f64().map(|f| f != 0.0).unwrap_or(false)),
+            serde_json::Value::Null => Some(false),
+            serde_json::Value::Array(arr) => Some(!arr.is_empty()),
+            serde_json::Value::Object(obj) => Some(!obj.is_empty()),
+        }
+    }
+
+    pub fn merge_object(&mut self, obj: &serde_json::Value) {
+        if let (serde_json::Value::Object(ref mut target), serde_json::Value::Object(source)) =
+            (&mut self.data, obj)
+        {
+            for (k, v) in source {
+                target.insert(k.clone(), v.clone());
+            }
+        }
+    }
+}
+
+/// Load template variables from file and command-line defines.
+fn load_template_vars(
+    vars_file: Option<&std::path::Path>,
+    defines: &[String],
+) -> Result<TemplateVars> {
+    let mut vars = TemplateVars::new();
+
+    // Load from file
+    if let Some(path) = vars_file {
+        let content = std::fs::read_to_string(path)?;
+        let json_value = if path.extension().map(|e| e == "json").unwrap_or(false) {
+            serde_json::from_str(&content)?
+        } else {
+            // Parse YAML and convert to JSON
+            let yaml: serde_yaml::Value = serde_yaml::from_str(&content)?;
+            yaml_to_json(&yaml)
+        };
+        vars = TemplateVars::from_json(json_value);
+    }
+
+    // Add inline defines (override file vars)
+    for define in defines {
+        if let Some((key, value)) = define.split_once('=') {
+            vars.set(key, value);
+        }
+    }
+
+    Ok(vars)
+}
+
+/// Convert YAML value to JSON value.
+fn yaml_to_json(yaml: &serde_yaml::Value) -> serde_json::Value {
+    match yaml {
+        serde_yaml::Value::Null => serde_json::Value::Null,
+        serde_yaml::Value::Bool(b) => serde_json::Value::Bool(*b),
+        serde_yaml::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                serde_json::Value::Number(i.into())
+            } else if let Some(f) = n.as_f64() {
+                serde_json::Number::from_f64(f)
+                    .map(serde_json::Value::Number)
+                    .unwrap_or(serde_json::Value::Null)
+            } else {
+                serde_json::Value::Null
+            }
+        }
+        serde_yaml::Value::String(s) => serde_json::Value::String(s.clone()),
+        serde_yaml::Value::Sequence(arr) => {
+            serde_json::Value::Array(arr.iter().map(yaml_to_json).collect())
+        }
+        serde_yaml::Value::Mapping(map) => {
+            let mut obj = serde_json::Map::new();
+            for (k, v) in map {
+                if let serde_yaml::Value::String(key) = k {
+                    obj.insert(key.clone(), yaml_to_json(v));
+                }
+            }
+            serde_json::Value::Object(obj)
+        }
+        serde_yaml::Value::Tagged(tagged) => yaml_to_json(&tagged.value),
+    }
+}
+
+/// Process a template string with all advanced features.
+fn process_template_string(s: &str, vars: &TemplateVars) -> String {
+    let mut result = s.to_string();
+
+    // Process conditionals first: {{#if condition}}...{{/if}}
+    result = process_conditionals(&result, vars);
+
+    // Process simple placeholders with filters: {{name|filter}}
+    result = process_placeholders_with_filters(&result, vars);
+
+    result
+}
+
+/// Process conditional blocks: {{#if condition}}content{{/if}} and {{#if condition}}content{{else}}other{{/if}}
+fn process_conditionals(s: &str, vars: &TemplateVars) -> String {
+    let mut result = s.to_string();
+
+    // Pattern for {{#if condition}}...{{/if}} (with optional {{else}})
+    let if_pattern = regex_lite::Regex::new(r"\{\{#if\s+([^}]+)\}\}([\s\S]*?)\{\{/if\}\}").unwrap();
+
+    while let Some(captures) = if_pattern.captures(&result) {
+        let full_match = captures.get(0).unwrap();
+        let condition = captures.get(1).unwrap().as_str().trim();
+        let content = captures.get(2).unwrap().as_str();
+
+        // Check for else clause
+        let (if_content, else_content) = if let Some(else_pos) = content.find("{{else}}") {
+            (&content[..else_pos], &content[else_pos + 8..])
+        } else {
+            (content, "")
+        };
+
+        // Evaluate condition
+        let is_true = evaluate_condition(condition, vars);
+
+        let replacement = if is_true {
+            if_content.to_string()
+        } else {
+            else_content.to_string()
+        };
+
+        result = result.replace(full_match.as_str(), &replacement);
+    }
+
+    // Also handle {{#unless condition}}...{{/unless}}
+    let unless_pattern =
+        regex_lite::Regex::new(r"\{\{#unless\s+([^}]+)\}\}([\s\S]*?)\{\{/unless\}\}").unwrap();
+
+    while let Some(captures) = unless_pattern.captures(&result) {
+        let full_match = captures.get(0).unwrap();
+        let condition = captures.get(1).unwrap().as_str().trim();
+        let content = captures.get(2).unwrap().as_str();
+
+        let is_true = evaluate_condition(condition, vars);
+        let replacement = if !is_true { content } else { "" };
+
+        result = result.replace(full_match.as_str(), replacement);
+    }
+
+    result
+}
+
+/// Evaluate a condition expression.
+fn evaluate_condition(condition: &str, vars: &TemplateVars) -> bool {
+    // Handle comparison operators
+    if condition.contains("==") {
+        let parts: Vec<&str> = condition.split("==").collect();
+        if parts.len() == 2 {
+            let left = resolve_value(parts[0].trim(), vars);
+            let right = resolve_value(parts[1].trim(), vars);
+            return left == right;
+        }
+    }
+    if condition.contains("!=") {
+        let parts: Vec<&str> = condition.split("!=").collect();
+        if parts.len() == 2 {
+            let left = resolve_value(parts[0].trim(), vars);
+            let right = resolve_value(parts[1].trim(), vars);
+            return left != right;
+        }
+    }
+    if condition.contains(">=") {
+        let parts: Vec<&str> = condition.split(">=").collect();
+        if parts.len() == 2 {
+            let left = resolve_number(parts[0].trim(), vars);
+            let right = resolve_number(parts[1].trim(), vars);
+            if let (Some(l), Some(r)) = (left, right) {
+                return l >= r;
+            }
+        }
+    }
+    if condition.contains("<=") {
+        let parts: Vec<&str> = condition.split("<=").collect();
+        if parts.len() == 2 {
+            let left = resolve_number(parts[0].trim(), vars);
+            let right = resolve_number(parts[1].trim(), vars);
+            if let (Some(l), Some(r)) = (left, right) {
+                return l <= r;
+            }
+        }
+    }
+    if condition.contains('>') && !condition.contains(">=") {
+        let parts: Vec<&str> = condition.split('>').collect();
+        if parts.len() == 2 {
+            let left = resolve_number(parts[0].trim(), vars);
+            let right = resolve_number(parts[1].trim(), vars);
+            if let (Some(l), Some(r)) = (left, right) {
+                return l > r;
+            }
+        }
+    }
+    if condition.contains('<') && !condition.contains("<=") {
+        let parts: Vec<&str> = condition.split('<').collect();
+        if parts.len() == 2 {
+            let left = resolve_number(parts[0].trim(), vars);
+            let right = resolve_number(parts[1].trim(), vars);
+            if let (Some(l), Some(r)) = (left, right) {
+                return l < r;
+            }
+        }
+    }
+
+    // Simple boolean check
+    vars.get_bool(condition).unwrap_or(false)
+}
+
+fn resolve_value(expr: &str, vars: &TemplateVars) -> String {
+    // Check if it's a quoted string
+    if (expr.starts_with('"') && expr.ends_with('"'))
+        || (expr.starts_with('\'') && expr.ends_with('\''))
+    {
+        return expr[1..expr.len() - 1].to_string();
+    }
+    // Otherwise resolve as variable
+    vars.get(expr).unwrap_or_default()
+}
+
+fn resolve_number(expr: &str, vars: &TemplateVars) -> Option<f64> {
+    let value = resolve_value(expr, vars);
+    value.parse().ok().or_else(|| expr.parse().ok())
+}
+
+/// Process placeholders with optional filters: {{name}}, {{name|upper}}, {{amount|currency}}
+fn process_placeholders_with_filters(s: &str, vars: &TemplateVars) -> String {
+    let placeholder_pattern = regex_lite::Regex::new(r"\{\{([^#/][^}]*)\}\}").unwrap();
+
+    let mut result = s.to_string();
+
+    // Find all placeholders and process them
+    for captures in placeholder_pattern.captures_iter(s) {
+        let full_match = captures.get(0).unwrap().as_str();
+        let inner = captures.get(1).unwrap().as_str().trim();
+
+        // Parse variable name and filters
+        let parts: Vec<&str> = inner.split('|').collect();
+        let var_name = parts[0].trim();
+        let filters: Vec<&str> = parts[1..].iter().map(|s| s.trim()).collect();
+
+        // Get the value
+        let mut value = vars.get(var_name).unwrap_or_else(|| full_match.to_string());
+
+        // Apply filters
+        for filter in filters {
+            value = apply_filter(&value, filter);
+        }
+
+        result = result.replace(full_match, &value);
+    }
+
+    result
+}
+
+/// Apply a filter to a value.
+fn apply_filter(value: &str, filter: &str) -> String {
+    // Parse filter name and optional argument: filter or filter:arg
+    let (filter_name, filter_arg) = if let Some(pos) = filter.find(':') {
+        (&filter[..pos], Some(&filter[pos + 1..]))
+    } else {
+        (filter, None)
+    };
+
+    match filter_name {
+        // String filters
+        "upper" | "uppercase" => value.to_uppercase(),
+        "lower" | "lowercase" => value.to_lowercase(),
+        "capitalize" | "title" => {
+            let mut chars = value.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+            }
+        }
+        "trim" => value.trim().to_string(),
+        "default" => {
+            if value.is_empty() {
+                filter_arg.unwrap_or("").to_string()
+            } else {
+                value.to_string()
+            }
+        }
+        "truncate" => {
+            let len: usize = filter_arg.and_then(|a| a.parse().ok()).unwrap_or(50);
+            if value.chars().count() > len {
+                format!("{}...", value.chars().take(len).collect::<String>())
+            } else {
+                value.to_string()
+            }
+        }
+        "replace" => {
+            // replace:old:new
+            if let Some(arg) = filter_arg {
+                let parts: Vec<&str> = arg.splitn(2, ':').collect();
+                if parts.len() == 2 {
+                    value.replace(parts[0], parts[1])
+                } else {
+                    value.to_string()
+                }
+            } else {
+                value.to_string()
+            }
+        }
+
+        // Number filters
+        "currency" => {
+            if let Ok(num) = value.parse::<f64>() {
+                let symbol = filter_arg.unwrap_or("$");
+                format!("{}{:.2}", symbol, num)
+            } else {
+                value.to_string()
+            }
+        }
+        "number" | "format_number" => {
+            if let Ok(num) = value.parse::<f64>() {
+                let decimals: usize = filter_arg.and_then(|a| a.parse().ok()).unwrap_or(2);
+                format!("{:.prec$}", num, prec = decimals)
+            } else {
+                value.to_string()
+            }
+        }
+        "percent" => {
+            if let Ok(num) = value.parse::<f64>() {
+                format!("{:.1}%", num * 100.0)
+            } else {
+                value.to_string()
+            }
+        }
+        "abs" => {
+            if let Ok(num) = value.parse::<f64>() {
+                num.abs().to_string()
+            } else {
+                value.to_string()
+            }
+        }
+        "round" => {
+            if let Ok(num) = value.parse::<f64>() {
+                let decimals: i32 = filter_arg.and_then(|a| a.parse().ok()).unwrap_or(0);
+                let factor = 10_f64.powi(decimals);
+                ((num * factor).round() / factor).to_string()
+            } else {
+                value.to_string()
+            }
+        }
+
+        // Date filters
+        "date" => {
+            // Try to parse and format date
+            let format = filter_arg.unwrap_or("%Y-%m-%d");
+            if let Ok(date) = chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d") {
+                date.format(format).to_string()
+            } else if let Ok(datetime) = chrono::DateTime::parse_from_rfc3339(value) {
+                datetime.format(format).to_string()
+            } else {
+                value.to_string()
+            }
+        }
+        "now" => {
+            let format = filter_arg.unwrap_or("%Y-%m-%d");
+            chrono::Local::now().format(format).to_string()
+        }
+
+        // Unknown filter - return value unchanged
+        _ => value.to_string(),
+    }
+}
+
+/// Process row-repeat markers in a sheet.
+/// Format: {{#row-repeat items}}...{{/row-repeat}}
+fn process_row_repeats(
+    workbook: &mut Workbook,
+    sheet_name: &str,
+    vars: &TemplateVars,
+) -> Result<()> {
+    // Find cells with row-repeat markers
+    let repeat_markers: Vec<(u32, String, String)> =
+        if let Some(sheet) = workbook.get_sheet(sheet_name) {
+            sheet
+                .cells()
+                .filter_map(|cell| {
+                    if let CellValue::String(s) = &cell.value {
+                        // Look for {{#row-repeat array_name}}
+                        if let Some(start) = s.find("{{#row-repeat") {
+                            if let Some(end) = s[start..].find("}}") {
+                                let marker = &s[start..start + end + 2];
+                                // Extract array name
+                                let inner = &marker[13..marker.len() - 2].trim();
+                                return Some((cell.reference.row, inner.to_string(), s.clone()));
+                            }
+                        }
+                    }
+                    None
+                })
+                .collect()
+        } else {
+            return Ok(());
+        };
+
+    // Process each row-repeat marker
+    for (row, array_name, _original) in repeat_markers.iter().rev() {
+        // Get the array data
+        if let Some(array) = vars.get_array(array_name) {
+            if array.is_empty() {
+                continue;
+            }
+
+            // Get the template row cells
+            let template_cells: Vec<(u32, String)> =
+                if let Some(sheet) = workbook.get_sheet(sheet_name) {
+                    sheet
+                        .cells()
+                        .filter(|c| c.reference.row == *row)
+                        .filter_map(|c| {
+                            if let CellValue::String(s) = &c.value {
+                                Some((c.reference.col, s.clone()))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                } else {
+                    continue;
+                };
+
+            // Generate rows for each array item
+            for (idx, item) in array.iter().enumerate() {
+                let target_row = *row + idx as u32;
+
+                // Create vars for this item
+                let mut item_vars = vars.clone();
+                item_vars.merge_object(item);
+                item_vars.set("_index", &(idx + 1).to_string());
+                item_vars.set("_index0", &idx.to_string());
+                item_vars.set("_first", &(idx == 0).to_string());
+                item_vars.set("_last", &(idx == array.len() - 1).to_string());
+
+                for (col, template) in &template_cells {
+                    // Remove the row-repeat markers from template
+                    let clean_template = template
+                        .replace(&format!("{{{{#row-repeat {}}}}}", array_name), "")
+                        .replace("{{/row-repeat}}", "");
+
+                    let processed = process_template_string(&clean_template, &item_vars);
+
+                    workbook.set_cell(
+                        sheet_name,
+                        CellRef::new(*col, target_row),
+                        CellValue::String(processed),
+                    )?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Find placeholders in a string (simple {{name}} format only).
+fn find_placeholders(s: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    let pattern = regex_lite::Regex::new(r"\{\{([^#/}][^}]*)\}\}").unwrap();
+
+    for captures in pattern.captures_iter(s) {
+        let inner = captures.get(1).unwrap().as_str().trim();
+        // Extract just the variable name (without filters)
+        let var_name = inner.split('|').next().unwrap_or(inner).trim();
+        if !result.contains(&var_name.to_string()) {
+            result.push(var_name.to_string());
+        }
+    }
+
+    result
 }

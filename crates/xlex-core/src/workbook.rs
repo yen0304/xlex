@@ -292,9 +292,12 @@ impl Workbook {
             return Err(XlexError::CannotDeleteLastSheet);
         }
 
-        let index = *self.sheet_map.get(name).ok_or_else(|| XlexError::SheetNotFound {
-            name: name.to_string(),
-        })?;
+        let index = *self
+            .sheet_map
+            .get(name)
+            .ok_or_else(|| XlexError::SheetNotFound {
+                name: name.to_string(),
+            })?;
 
         // Remove from sheets
         self.sheets.remove(index);
@@ -318,13 +321,18 @@ impl Workbook {
     /// Moves a sheet to a new position (0-based index).
     pub fn move_sheet(&mut self, name: &str, new_position: usize) -> XlexResult<()> {
         // Check sheet exists
-        let current_index = *self.sheet_map.get(name).ok_or_else(|| XlexError::SheetNotFound {
-            name: name.to_string(),
-        })?;
+        let current_index = *self
+            .sheet_map
+            .get(name)
+            .ok_or_else(|| XlexError::SheetNotFound {
+                name: name.to_string(),
+            })?;
 
         // Validate new position
         if new_position >= self.sheets.len() {
-            return Err(XlexError::SheetIndexOutOfBounds { index: new_position });
+            return Err(XlexError::SheetIndexOutOfBounds {
+                index: new_position,
+            });
         }
 
         // If same position, nothing to do
@@ -334,7 +342,7 @@ impl Workbook {
 
         // Remove sheet from current position
         let sheet = self.sheets.remove(current_index);
-        
+
         // Insert at new position
         self.sheets.insert(new_position, sheet);
 
@@ -440,9 +448,12 @@ impl Workbook {
 
     /// Sets the active sheet by name.
     pub fn set_active_sheet_by_name(&mut self, name: &str) -> XlexResult<()> {
-        let index = *self.sheet_map.get(name).ok_or_else(|| XlexError::SheetNotFound {
-            name: name.to_string(),
-        })?;
+        let index = *self
+            .sheet_map
+            .get(name)
+            .ok_or_else(|| XlexError::SheetNotFound {
+                name: name.to_string(),
+            })?;
         self.active_sheet = index;
         self.modified = true;
         Ok(())
@@ -450,26 +461,36 @@ impl Workbook {
 
     /// Gets the visibility of a sheet.
     pub fn get_sheet_visibility(&self, name: &str) -> XlexResult<SheetVisibility> {
-        let sheet = self.get_sheet(name).ok_or_else(|| XlexError::SheetNotFound {
-            name: name.to_string(),
-        })?;
+        let sheet = self
+            .get_sheet(name)
+            .ok_or_else(|| XlexError::SheetNotFound {
+                name: name.to_string(),
+            })?;
         Ok(sheet.info.visibility)
     }
 
     /// Sets the visibility of a sheet.
-    pub fn set_sheet_visibility(&mut self, name: &str, visibility: SheetVisibility) -> XlexResult<()> {
-        let sheet = self.get_sheet_mut(name).ok_or_else(|| XlexError::SheetNotFound {
-            name: name.to_string(),
-        })?;
+    pub fn set_sheet_visibility(
+        &mut self,
+        name: &str,
+        visibility: SheetVisibility,
+    ) -> XlexResult<()> {
+        let sheet = self
+            .get_sheet_mut(name)
+            .ok_or_else(|| XlexError::SheetNotFound {
+                name: name.to_string(),
+            })?;
         sheet.info.visibility = visibility;
         Ok(())
     }
 
     /// Gets a cell value.
     pub fn get_cell(&self, sheet_name: &str, cell_ref: &CellRef) -> XlexResult<CellValue> {
-        let sheet = self.get_sheet(sheet_name).ok_or_else(|| XlexError::SheetNotFound {
-            name: sheet_name.to_string(),
-        })?;
+        let sheet = self
+            .get_sheet(sheet_name)
+            .ok_or_else(|| XlexError::SheetNotFound {
+                name: sheet_name.to_string(),
+            })?;
         Ok(sheet.get_value(cell_ref))
     }
 
@@ -556,9 +577,12 @@ impl Workbook {
 
     /// Saves the workbook to its original path.
     pub fn save(&self) -> XlexResult<()> {
-        let path = self.path.as_ref().ok_or_else(|| XlexError::OperationFailed {
-            message: "No file path set for workbook".to_string(),
-        })?;
+        let path = self
+            .path
+            .as_ref()
+            .ok_or_else(|| XlexError::OperationFailed {
+                message: "No file path set for workbook".to_string(),
+            })?;
         self.save_as(path)
     }
 
@@ -617,6 +641,7 @@ impl Workbook {
     /// Internal constructor for the parser.
     /// This is hidden from the public API and should only be used by the parser module.
     #[doc(hidden)]
+    #[allow(clippy::too_many_arguments)]
     pub fn __from_parts(
         path: Option<PathBuf>,
         properties: DocumentProperties,
@@ -731,18 +756,10 @@ mod tests {
     #[test]
     fn test_workbook_stats() {
         let mut wb = Workbook::new();
-        wb.set_cell(
-            "Sheet1",
-            CellRef::new(1, 1),
-            CellValue::string("Hello"),
-        )
-        .unwrap();
-        wb.set_cell(
-            "Sheet1",
-            CellRef::new(1, 2),
-            CellValue::formula("A1"),
-        )
-        .unwrap();
+        wb.set_cell("Sheet1", CellRef::new(1, 1), CellValue::string("Hello"))
+            .unwrap();
+        wb.set_cell("Sheet1", CellRef::new(1, 2), CellValue::formula("A1"))
+            .unwrap();
 
         let stats = wb.stats();
         assert_eq!(stats.sheet_count, 1);

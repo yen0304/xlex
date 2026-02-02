@@ -1,5 +1,4 @@
-.github/prompts/
-.claude/
+
 
 #Rust files
 *.rs.bk

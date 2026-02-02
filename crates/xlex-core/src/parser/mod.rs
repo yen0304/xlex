@@ -11,10 +11,7 @@ pub use workbook::WorkbookParser;
 use crate::error::{XlexError, XlexResult};
 
 /// Required entries in an xlsx file.
-pub const REQUIRED_ENTRIES: &[&str] = &[
-    "[Content_Types].xml",
-    "xl/workbook.xml",
-];
+pub const REQUIRED_ENTRIES: &[&str] = &["[Content_Types].xml", "xl/workbook.xml"];
 
 /// Validates that a ZIP archive contains required xlsx entries.
 pub fn validate_xlsx_structure<R: std::io::Read + std::io::Seek>(

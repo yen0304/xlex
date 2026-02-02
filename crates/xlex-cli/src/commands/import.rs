@@ -7,6 +7,7 @@ use colored::Colorize;
 use xlex_core::{CellRef, CellValue, Workbook};
 
 use super::GlobalOptions;
+use crate::progress::Progress;
 
 /// Arguments for import operations.
 #[derive(Parser)]
@@ -119,6 +120,19 @@ fn import_csv(
 
     let sheet_name = sheet.unwrap_or("Sheet1");
     let content = std::fs::read_to_string(source)?;
+    let lines: Vec<&str> = content.lines().collect();
+    let total_lines = lines.len();
+
+    // Create progress bar for large files
+    let progress = if total_lines > 100 {
+        Some(Progress::bar(
+            total_lines as u64,
+            "Importing CSV...",
+            global.quiet,
+        ))
+    } else {
+        None
+    };
 
     let mut workbook = if dest.exists() {
         Workbook::open(dest)?
@@ -132,7 +146,7 @@ fn import_csv(
     }
 
     let mut row = 1u32;
-    for line in content.lines() {
+    for line in lines.iter() {
         let mut col = 1u32;
         for value in line.split(delimiter) {
             let cell_ref = CellRef::new(col, row);
@@ -141,6 +155,13 @@ fn import_csv(
             col += 1;
         }
         row += 1;
+        if let Some(ref pb) = progress {
+            pb.inc(1);
+        }
+    }
+
+    if let Some(ref pb) = progress {
+        pb.finish_and_clear();
     }
 
     workbook.save_as(dest)?;
@@ -272,9 +293,7 @@ fn json_to_cell(value: &serde_json::Value) -> CellValue {
     match value {
         serde_json::Value::Null => CellValue::Empty,
         serde_json::Value::Bool(b) => CellValue::Boolean(*b),
-        serde_json::Value::Number(n) => {
-            CellValue::Number(n.as_f64().unwrap_or(0.0))
-        }
+        serde_json::Value::Number(n) => CellValue::Number(n.as_f64().unwrap_or(0.0)),
         serde_json::Value::String(s) => CellValue::String(s.clone()),
         _ => CellValue::String(value.to_string()),
     }

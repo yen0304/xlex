@@ -204,12 +204,7 @@ pub fn run(args: &FormulaArgs, global: &GlobalOptions) -> Result<()> {
     }
 }
 
-fn get(
-    file: &std::path::Path,
-    sheet: &str,
-    cell: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn get(file: &std::path::Path, sheet: &str, cell: &str, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let cell_ref = CellRef::parse(cell)?;
     let value = workbook.get_cell(sheet, &cell_ref)?;
@@ -251,16 +246,16 @@ fn set(
     let cell_ref = CellRef::parse(cell)?;
 
     // Store formula (result is None - will be calculated by Excel)
-    workbook.set_cell(
-        sheet,
-        cell_ref.clone(),
-        CellValue::formula(formula),
-    )?;
+    workbook.set_cell(sheet, cell_ref.clone(), CellValue::formula(formula))?;
 
     workbook.save()?;
 
     if !global.quiet {
-        println!("Set formula {} = {}", cell.cyan(), format!("={}", formula).green());
+        println!(
+            "Set formula {} = {}",
+            cell.cyan(),
+            format!("={}", formula).green()
+        );
     }
 
     Ok(())
@@ -268,16 +263,20 @@ fn set(
 
 fn list(file: &std::path::Path, sheet: &str, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     let formulas: Vec<_> = sheet_obj
         .cells()
         .filter_map(|c| match &c.value {
-            CellValue::Formula { formula: f, cached_result: result } => Some((c.reference.clone(), f.clone(), result.clone())),
+            CellValue::Formula {
+                formula: f,
+                cached_result: result,
+            } => Some((c.reference.clone(), f.clone(), result.clone())),
             _ => None,
         })
         .collect();
@@ -301,7 +300,12 @@ fn list(file: &std::path::Path, sheet: &str, global: &GlobalOptions) -> Result<(
                 .as_ref()
                 .map(|r| format!(" → {}", r.to_display_string()))
                 .unwrap_or_default();
-            println!("  {}: ={}{}", cell.to_a1().cyan(), formula, result_str.dimmed());
+            println!(
+                "  {}: ={}{}",
+                cell.to_a1().cyan(),
+                formula,
+                result_str.dimmed()
+            );
         }
     }
 
@@ -338,17 +342,17 @@ fn eval(
     Ok(())
 }
 
-fn check(
-    file: &std::path::Path,
-    sheet: Option<&str>,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn check(file: &std::path::Path, sheet: Option<&str>, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(file)?;
 
     let sheets: Vec<_> = if let Some(s) = sheet {
         vec![s.to_string()]
     } else {
-        workbook.sheet_names().iter().map(|s| s.to_string()).collect::<Vec<String>>()
+        workbook
+            .sheet_names()
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>()
     };
 
     let mut errors: Vec<(String, String, String)> = Vec::new();
@@ -356,7 +360,11 @@ fn check(
     for sheet_name in &sheets {
         if let Some(sheet_obj) = workbook.get_sheet(sheet_name) {
             for cell in sheet_obj.cells() {
-                if let CellValue::Formula { cached_result: Some(result), .. } = &cell.value {
+                if let CellValue::Formula {
+                    cached_result: Some(result),
+                    ..
+                } = &cell.value
+                {
                     if matches!(result.as_ref(), CellValue::Error(_)) {
                         errors.push((
                             sheet_name.to_string(),
@@ -416,11 +424,12 @@ fn calc_sum(
 ) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let range_ref = Range::parse(range)?;
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     let mut sum = 0.0;
     for cell_ref in range_ref.cells() {
@@ -447,11 +456,12 @@ fn calc_avg(
 ) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let range_ref = Range::parse(range)?;
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     let mut sum = 0.0;
     let mut count = 0;
@@ -463,11 +473,7 @@ fn calc_avg(
         }
     }
 
-    let avg = if count > 0 {
-        sum / count as f64
-    } else {
-        0.0
-    };
+    let avg = if count > 0 { sum / count as f64 } else { 0.0 };
 
     if global.format == OutputFormat::Json {
         println!("{}", serde_json::json!({ "average": avg, "count": count }));
@@ -487,11 +493,12 @@ fn calc_count(
 ) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let range_ref = Range::parse(range)?;
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     let mut count = 0;
     for cell_ref in range_ref.cells() {
@@ -522,11 +529,12 @@ fn calc_min(
 ) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let range_ref = Range::parse(range)?;
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     let mut min: Option<f64> = None;
     for cell_ref in range_ref.cells() {
@@ -556,11 +564,12 @@ fn calc_max(
 ) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let range_ref = Range::parse(range)?;
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     let mut max: Option<f64> = None;
     for cell_ref in range_ref.cells() {
@@ -626,12 +635,46 @@ fn validate(formula: &str, global: &GlobalOptions) -> Result<()> {
             let func_name = cap.as_str().trim_end_matches(&['(', ' '][..]);
             // Known Excel functions (sample list)
             let known_funcs = [
-                "SUM", "AVERAGE", "COUNT", "COUNTA", "MIN", "MAX", "IF", "VLOOKUP", "HLOOKUP",
-                "INDEX", "MATCH", "SUMIF", "COUNTIF", "CONCATENATE", "LEFT", "RIGHT", "MID",
-                "LEN", "TRIM", "UPPER", "LOWER", "ROUND", "ABS", "SQRT", "NOW", "TODAY",
-                "DATE", "YEAR", "MONTH", "DAY", "AND", "OR", "NOT", "TRUE", "FALSE",
+                "SUM",
+                "AVERAGE",
+                "COUNT",
+                "COUNTA",
+                "MIN",
+                "MAX",
+                "IF",
+                "VLOOKUP",
+                "HLOOKUP",
+                "INDEX",
+                "MATCH",
+                "SUMIF",
+                "COUNTIF",
+                "CONCATENATE",
+                "LEFT",
+                "RIGHT",
+                "MID",
+                "LEN",
+                "TRIM",
+                "UPPER",
+                "LOWER",
+                "ROUND",
+                "ABS",
+                "SQRT",
+                "NOW",
+                "TODAY",
+                "DATE",
+                "YEAR",
+                "MONTH",
+                "DAY",
+                "AND",
+                "OR",
+                "NOT",
+                "TRUE",
+                "FALSE",
             ];
-            if !known_funcs.iter().any(|f| f.eq_ignore_ascii_case(func_name)) {
+            if !known_funcs
+                .iter()
+                .any(|f| f.eq_ignore_ascii_case(func_name))
+            {
                 warnings.push(format!("Unknown function: {}", func_name));
             }
         }
@@ -668,27 +711,32 @@ fn validate(formula: &str, global: &GlobalOptions) -> Result<()> {
     }
 }
 
-fn stats(
-    file: &std::path::Path,
-    sheet: Option<&str>,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn stats(file: &std::path::Path, sheet: Option<&str>, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(file)?;
 
     let sheets: Vec<_> = if let Some(s) = sheet {
         vec![s.to_string()]
     } else {
-        workbook.sheet_names().iter().map(|s| s.to_string()).collect::<Vec<String>>()
+        workbook
+            .sheet_names()
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>()
     };
 
     let mut total_formulas = 0;
     let mut total_errors = 0;
-    let mut function_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut function_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
 
     for sheet_name in &sheets {
         if let Some(sheet_obj) = workbook.get_sheet(sheet_name) {
             for cell in sheet_obj.cells() {
-                if let CellValue::Formula { formula: f, cached_result: result } = &cell.value {
+                if let CellValue::Formula {
+                    formula: f,
+                    cached_result: result,
+                } = &cell.value
+                {
                     total_formulas += 1;
 
                     // Check for errors
@@ -702,7 +750,10 @@ fn stats(
                     let re = regex_lite::Regex::new(r"[A-Z]+\s*\(").ok();
                     if let Some(re) = re {
                         for cap in re.find_iter(f) {
-                            let func_name = cap.as_str().trim_end_matches(&['(', ' '][..]).to_uppercase();
+                            let func_name = cap
+                                .as_str()
+                                .trim_end_matches(&['(', ' '][..])
+                                .to_uppercase();
                             *function_counts.entry(func_name).or_insert(0) += 1;
                         }
                     }
@@ -750,11 +801,12 @@ fn refs(
     let workbook = Workbook::open(file)?;
     let cell_ref = CellRef::parse(cell)?;
 
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     let mut precedents: Vec<String> = Vec::new();
     let mut dependents: Vec<String> = Vec::new();
@@ -822,16 +874,20 @@ fn replace_formula(
     global: &GlobalOptions,
 ) -> Result<()> {
     if global.dry_run {
-        println!("Would replace '{}' with '{}' in formulas", find, replace_with);
+        println!(
+            "Would replace '{}' with '{}' in formulas",
+            find, replace_with
+        );
         return Ok(());
     }
 
     let mut workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     let mut replaced_count = 0;
 
@@ -893,7 +949,11 @@ fn circular(
     let sheets_to_check: Vec<String> = if let Some(name) = sheet_name {
         vec![name.to_string()]
     } else {
-        workbook.sheet_names().iter().map(|s| s.to_string()).collect()
+        workbook
+            .sheet_names()
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
     };
 
     let mut all_circular: Vec<(String, String, Vec<String>)> = Vec::new(); // (sheet, cell, cycle_path)

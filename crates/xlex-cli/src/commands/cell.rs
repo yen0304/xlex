@@ -208,12 +208,7 @@ pub fn run(args: &CellArgs, global: &GlobalOptions) -> Result<()> {
     }
 }
 
-fn get(
-    file: &std::path::Path,
-    sheet: &str,
-    cell: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn get(file: &std::path::Path, sheet: &str, cell: &str, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let cell_ref = CellRef::parse(cell)?;
     let value = workbook.get_cell(sheet, &cell_ref)?;
@@ -262,11 +257,11 @@ fn set(
         ValueType::Auto => parse_auto_value(value),
         ValueType::String => CellValue::String(value.to_string()),
         ValueType::Number => {
-            let n: f64 = value.parse().map_err(|_| {
-                xlex_core::XlexError::InvalidCellValue {
+            let n: f64 = value
+                .parse()
+                .map_err(|_| xlex_core::XlexError::InvalidCellValue {
                     message: format!("Cannot parse '{}' as number", value),
-                }
-            })?;
+                })?;
             CellValue::Number(n)
         }
         ValueType::Boolean => {
@@ -308,7 +303,10 @@ fn set_formula(
     let formula = formula.strip_prefix('=').unwrap_or(formula);
 
     if global.dry_run {
-        println!("Would set formula in {} in {} to '={}'", cell, sheet, formula);
+        println!(
+            "Would set formula in {} in {} to '={}'",
+            cell, sheet, formula
+        );
         return Ok(());
     }
 
@@ -334,12 +332,7 @@ fn set_formula(
     Ok(())
 }
 
-fn clear(
-    file: &std::path::Path,
-    sheet: &str,
-    cell: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn clear(file: &std::path::Path, sheet: &str, cell: &str, global: &GlobalOptions) -> Result<()> {
     if global.dry_run {
         println!("Would clear {} in {}", cell, sheet);
         return Ok(());
@@ -366,12 +359,7 @@ fn clear(
     Ok(())
 }
 
-fn get_type(
-    file: &std::path::Path,
-    sheet: &str,
-    cell: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn get_type(file: &std::path::Path, sheet: &str, cell: &str, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let cell_ref = CellRef::parse(cell)?;
     let value = workbook.get_cell(sheet, &cell_ref)?;
@@ -517,12 +505,13 @@ fn comment_get(
 ) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let cell_ref = CellRef::parse(cell)?;
-    
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     let comment = sheet_obj
         .get_cell(&cell_ref)
@@ -559,11 +548,12 @@ fn comment_set(
     let cell_ref = CellRef::parse(cell)?;
 
     {
-        let sheet_obj = workbook
-            .get_sheet_mut(sheet)
-            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-                name: sheet.to_string(),
-            })?;
+        let sheet_obj =
+            workbook
+                .get_sheet_mut(sheet)
+                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                    name: sheet.to_string(),
+                })?;
         sheet_obj.set_cell_comment(&cell_ref, Some(text.to_string()));
     }
 
@@ -590,11 +580,12 @@ fn comment_remove(
     let cell_ref = CellRef::parse(cell)?;
 
     {
-        let sheet_obj = workbook
-            .get_sheet_mut(sheet)
-            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-                name: sheet.to_string(),
-            })?;
+        let sheet_obj =
+            workbook
+                .get_sheet_mut(sheet)
+                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                    name: sheet.to_string(),
+                })?;
         sheet_obj.set_cell_comment(&cell_ref, None);
     }
 
@@ -606,17 +597,14 @@ fn comment_remove(
     Ok(())
 }
 
-fn comment_list(
-    file: &std::path::Path,
-    sheet: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn comment_list(file: &std::path::Path, sheet: &str, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     let comments: Vec<_> = sheet_obj
         .cells()
@@ -631,13 +619,20 @@ fn comment_list(
         .collect();
 
     if global.format == OutputFormat::Json {
-        println!("{}", serde_json::to_string_pretty(&serde_json::json!({ "comments": comments }))?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({ "comments": comments }))?
+        );
     } else if comments.is_empty() {
         println!("No comments found");
     } else {
         println!("{} comment(s):", comments.len());
         for c in comments {
-            println!("  {}: {}", c["cell"].as_str().unwrap().cyan(), c["comment"].as_str().unwrap());
+            println!(
+                "  {}: {}",
+                c["cell"].as_str().unwrap().cyan(),
+                c["comment"].as_str().unwrap()
+            );
         }
     }
     Ok(())
@@ -657,20 +652,16 @@ fn run_link(args: &LinkArgs, global: &GlobalOptions) -> Result<()> {
     }
 }
 
-fn link_get(
-    file: &std::path::Path,
-    sheet: &str,
-    cell: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn link_get(file: &std::path::Path, sheet: &str, cell: &str, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let cell_ref = CellRef::parse(cell)?;
 
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     let hyperlink = sheet_obj
         .get_cell(&cell_ref)
@@ -707,18 +698,24 @@ fn link_set(
     let cell_ref = CellRef::parse(cell)?;
 
     {
-        let sheet_obj = workbook
-            .get_sheet_mut(sheet)
-            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-                name: sheet.to_string(),
-            })?;
+        let sheet_obj =
+            workbook
+                .get_sheet_mut(sheet)
+                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                    name: sheet.to_string(),
+                })?;
         sheet_obj.set_cell_hyperlink(&cell_ref, Some(url.to_string()));
     }
 
     workbook.save()?;
 
     if !global.quiet {
-        println!("{} Set hyperlink on {} to {}", "✓".green(), cell.cyan(), url);
+        println!(
+            "{} Set hyperlink on {} to {}",
+            "✓".green(),
+            cell.cyan(),
+            url
+        );
     }
     Ok(())
 }
@@ -738,11 +735,12 @@ fn link_remove(
     let cell_ref = CellRef::parse(cell)?;
 
     {
-        let sheet_obj = workbook
-            .get_sheet_mut(sheet)
-            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-                name: sheet.to_string(),
-            })?;
+        let sheet_obj =
+            workbook
+                .get_sheet_mut(sheet)
+                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                    name: sheet.to_string(),
+                })?;
         sheet_obj.set_cell_hyperlink(&cell_ref, None);
     }
 

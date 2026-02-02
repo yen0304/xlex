@@ -127,48 +127,81 @@ pub enum ColumnCommand {
 /// Run column operations.
 pub fn run(args: &ColumnArgs, global: &GlobalOptions) -> Result<()> {
     match &args.command {
-        ColumnCommand::Get { file, sheet, column } => get(file, sheet, column, global),
-        ColumnCommand::Insert { file, sheet, column } => insert(file, sheet, column, global),
-        ColumnCommand::Delete { file, sheet, column } => delete(file, sheet, column, global),
-        ColumnCommand::Copy { file, sheet, source, dest } => copy(file, sheet, source, dest, global),
-        ColumnCommand::Move { file, sheet, source, dest } => move_column(file, sheet, source, dest, global),
+        ColumnCommand::Get {
+            file,
+            sheet,
+            column,
+        } => get(file, sheet, column, global),
+        ColumnCommand::Insert {
+            file,
+            sheet,
+            column,
+        } => insert(file, sheet, column, global),
+        ColumnCommand::Delete {
+            file,
+            sheet,
+            column,
+        } => delete(file, sheet, column, global),
+        ColumnCommand::Copy {
+            file,
+            sheet,
+            source,
+            dest,
+        } => copy(file, sheet, source, dest, global),
+        ColumnCommand::Move {
+            file,
+            sheet,
+            source,
+            dest,
+        } => move_column(file, sheet, source, dest, global),
         ColumnCommand::Width {
             file,
             sheet,
             column,
             width: col_width,
         } => width(file, sheet, column, *col_width, global),
-        ColumnCommand::Hide { file, sheet, column } => hide(file, sheet, column, global),
-        ColumnCommand::Unhide { file, sheet, column } => unhide(file, sheet, column, global),
-        ColumnCommand::Header { file, sheet, column } => header(file, sheet, column, global),
+        ColumnCommand::Hide {
+            file,
+            sheet,
+            column,
+        } => hide(file, sheet, column, global),
+        ColumnCommand::Unhide {
+            file,
+            sheet,
+            column,
+        } => unhide(file, sheet, column, global),
+        ColumnCommand::Header {
+            file,
+            sheet,
+            column,
+        } => header(file, sheet, column, global),
         ColumnCommand::Find {
             file,
             sheet,
             pattern,
         } => find(file, sheet, pattern, global),
-        ColumnCommand::Stats { file, sheet, column } => stats(file, sheet, column, global),
+        ColumnCommand::Stats {
+            file,
+            sheet,
+            column,
+        } => stats(file, sheet, column, global),
     }
 }
 
 fn parse_column(col: &str) -> Result<u32> {
-    CellRef::col_from_letters_pub(&col.to_uppercase()).ok_or_else(|| {
-        anyhow::anyhow!("Invalid column: {}", col)
-    })
+    CellRef::col_from_letters_pub(&col.to_uppercase())
+        .ok_or_else(|| anyhow::anyhow!("Invalid column: {}", col))
 }
 
-fn get(
-    file: &std::path::Path,
-    sheet: &str,
-    column: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn get(file: &std::path::Path, sheet: &str, column: &str, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let col = parse_column(column)?;
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // Collect cells in this column
     let mut col_cells: Vec<_> = sheet_obj
@@ -208,11 +241,12 @@ fn insert(file: &std::path::Path, sheet: &str, column: &str, global: &GlobalOpti
     }
 
     let mut workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     sheet_obj.insert_columns(col, 1);
     let _ = sheet_obj;
@@ -234,11 +268,12 @@ fn delete(file: &std::path::Path, sheet: &str, column: &str, global: &GlobalOpti
     }
 
     let mut workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     sheet_obj.delete_columns(col, 1);
     let _ = sheet_obj;
@@ -269,11 +304,12 @@ fn copy(
     let mut workbook = Workbook::open(file)?;
 
     // Get source column data
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // Collect all cells in the source column
     let source_cells: Vec<_> = sheet_obj
@@ -286,11 +322,12 @@ fn copy(
     let _ = sheet_obj;
 
     // Insert a new column at destination
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     sheet_obj.insert_columns(dest_col, 1);
 
@@ -337,11 +374,12 @@ fn move_column(
     let mut workbook = Workbook::open(file)?;
 
     // Get source column data
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // Collect all cells in the source column
     let source_cells: Vec<_> = sheet_obj
@@ -353,11 +391,12 @@ fn move_column(
     let source_width = sheet_obj.get_column_width(source_col);
     let _ = sheet_obj;
 
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // The logic differs based on whether moving left or right
     if source_col < dest_col {
@@ -423,11 +462,12 @@ fn width(
         }
 
         let mut workbook = Workbook::open(file)?;
-        let sheet_obj = workbook
-            .get_sheet_mut(sheet)
-            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-                name: sheet.to_string(),
-            })?;
+        let sheet_obj =
+            workbook
+                .get_sheet_mut(sheet)
+                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                    name: sheet.to_string(),
+                })?;
 
         sheet_obj.set_column_width(col, w);
         let _ = sheet_obj;
@@ -438,11 +478,12 @@ fn width(
         }
     } else {
         let workbook = Workbook::open(file)?;
-        let sheet_obj = workbook
-            .get_sheet(sheet)
-            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-                name: sheet.to_string(),
-            })?;
+        let sheet_obj =
+            workbook
+                .get_sheet(sheet)
+                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                    name: sheet.to_string(),
+                })?;
 
         if let Some(w) = sheet_obj.get_column_width(col) {
             println!("{}", w);
@@ -462,11 +503,12 @@ fn hide(file: &std::path::Path, sheet: &str, column: &str, global: &GlobalOption
 
     let col = parse_column(column)?;
     let mut workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     sheet_obj.set_column_hidden(col, true);
     let _ = sheet_obj;
@@ -487,11 +529,12 @@ fn unhide(file: &std::path::Path, sheet: &str, column: &str, global: &GlobalOpti
 
     let col = parse_column(column)?;
     let mut workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     sheet_obj.set_column_hidden(col, false);
     let _ = sheet_obj;
@@ -504,12 +547,7 @@ fn unhide(file: &std::path::Path, sheet: &str, column: &str, global: &GlobalOpti
     Ok(())
 }
 
-fn header(
-    file: &std::path::Path,
-    sheet: &str,
-    column: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn header(file: &std::path::Path, sheet: &str, column: &str, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let col = parse_column(column)?;
     let cell_ref = CellRef::new(col, 1);
@@ -528,18 +566,14 @@ fn header(
     Ok(())
 }
 
-fn find(
-    file: &std::path::Path,
-    sheet: &str,
-    pattern: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn find(file: &std::path::Path, sheet: &str, pattern: &str, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     let mut matches: Vec<u32> = Vec::new();
     for cell in sheet_obj.cells() {
@@ -550,7 +584,10 @@ fn find(
     }
 
     matches.sort();
-    let col_letters: Vec<String> = matches.iter().map(|c| CellRef::col_to_letters(*c)).collect();
+    let col_letters: Vec<String> = matches
+        .iter()
+        .map(|c| CellRef::col_to_letters(*c))
+        .collect();
 
     if global.format == OutputFormat::Json {
         let json = serde_json::json!({
@@ -568,19 +605,15 @@ fn find(
     Ok(())
 }
 
-fn stats(
-    file: &std::path::Path,
-    sheet: &str,
-    column: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn stats(file: &std::path::Path, sheet: &str, column: &str, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(file)?;
     let col = parse_column(column)?;
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // Collect statistics
     let mut count = 0;

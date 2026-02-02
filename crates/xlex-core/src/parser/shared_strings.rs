@@ -26,9 +26,8 @@ impl SharedStringsParser {
     pub fn new(cache_size: usize) -> Self {
         Self {
             cache: LruCache::new(
-                std::num::NonZeroUsize::new(cache_size).unwrap_or(
-                    std::num::NonZeroUsize::new(DEFAULT_CACHE_SIZE).unwrap(),
-                ),
+                std::num::NonZeroUsize::new(cache_size)
+                    .unwrap_or(std::num::NonZeroUsize::new(DEFAULT_CACHE_SIZE).unwrap()),
             ),
             strings: None,
             count: None,
@@ -54,30 +53,26 @@ impl SharedStringsParser {
 
         loop {
             match xml_reader.read_event_into(&mut buf) {
-                Ok(Event::Start(e)) => {
-                    match e.name().as_ref() {
-                        b"si" => {
-                            in_si = true;
-                            current_string.clear();
-                        }
-                        b"t" if in_si => {
-                            in_t = true;
-                        }
-                        _ => {}
+                Ok(Event::Start(e)) => match e.name().as_ref() {
+                    b"si" => {
+                        in_si = true;
+                        current_string.clear();
                     }
-                }
-                Ok(Event::End(e)) => {
-                    match e.name().as_ref() {
-                        b"si" => {
-                            strings.push(std::mem::take(&mut current_string));
-                            in_si = false;
-                        }
-                        b"t" => {
-                            in_t = false;
-                        }
-                        _ => {}
+                    b"t" if in_si => {
+                        in_t = true;
                     }
-                }
+                    _ => {}
+                },
+                Ok(Event::End(e)) => match e.name().as_ref() {
+                    b"si" => {
+                        strings.push(std::mem::take(&mut current_string));
+                        in_si = false;
+                    }
+                    b"t" => {
+                        in_t = false;
+                    }
+                    _ => {}
+                },
                 Ok(Event::Text(e)) => {
                     if in_t {
                         let text = e.unescape().map_err(|e| XlexError::InvalidXml {

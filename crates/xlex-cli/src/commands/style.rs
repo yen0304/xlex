@@ -186,11 +186,12 @@ pub fn run(args: &StyleArgs, global: &GlobalOptions) -> Result<()> {
 
 fn run_condition(args: &ConditionArgs, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(&args.file)?;
-    let _sheet = workbook
-        .get_sheet(&args.sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: args.sheet.clone(),
-        })?;
+    let _sheet =
+        workbook
+            .get_sheet(&args.sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: args.sheet.clone(),
+            })?;
 
     // List conditional formats
     if args.list {
@@ -199,7 +200,10 @@ fn run_condition(args: &ConditionArgs, global: &GlobalOptions) -> Result<()> {
             println!("{}", serde_json::json!({"conditions": []}));
         } else {
             println!("No conditional formatting rules found");
-            println!("{}", "(Conditional formatting requires full XML support)".yellow());
+            println!(
+                "{}",
+                "(Conditional formatting requires full XML support)".yellow()
+            );
         }
         return Ok(());
     }
@@ -211,16 +215,24 @@ fn run_condition(args: &ConditionArgs, global: &GlobalOptions) -> Result<()> {
             return Ok(());
         }
         if !global.quiet {
-            println!("{} Removed conditional formatting from {:?}", "✓".green(), args.range);
-            println!("{}", "(Note: Full support requires conditional formatting XML)".yellow());
+            println!(
+                "{} Removed conditional formatting from {:?}",
+                "✓".green(),
+                args.range
+            );
+            println!(
+                "{}",
+                "(Note: Full support requires conditional formatting XML)".yellow()
+            );
         }
         return Ok(());
     }
 
     // Add new conditional formatting
-    let range = args.range.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("Range is required when adding conditional formatting")
-    })?;
+    let range = args
+        .range
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Range is required when adding conditional formatting"))?;
 
     if global.dry_run {
         if args.highlight_cells {
@@ -233,13 +245,20 @@ fn run_condition(args: &ConditionArgs, global: &GlobalOptions) -> Result<()> {
             } else {
                 "specified condition".to_string()
             };
-            println!("Would add highlight rule for cells {} to {}", condition, range);
+            println!(
+                "Would add highlight rule for cells {} to {}",
+                condition, range
+            );
         } else if args.color_scale {
             println!("Would add color scale to {}", range);
         } else if args.data_bars {
             println!("Would add data bars to {}", range);
         } else if args.icon_set.is_some() {
-            println!("Would add icon set '{}' to {}", args.icon_set.as_ref().unwrap(), range);
+            println!(
+                "Would add icon set '{}' to {}",
+                args.icon_set.as_ref().unwrap(),
+                range
+            );
         }
         return Ok(());
     }
@@ -247,25 +266,78 @@ fn run_condition(args: &ConditionArgs, global: &GlobalOptions) -> Result<()> {
     // Output what would be done (stub implementation)
     if !global.quiet {
         if args.highlight_cells {
-            let bg = args.bg_color.as_ref().map(|c| format!(" with bg #{}", c)).unwrap_or_default();
+            let bg = args
+                .bg_color
+                .as_ref()
+                .map(|c| format!(" with bg #{}", c))
+                .unwrap_or_default();
             if let Some(gt) = args.gt {
-                println!("{} Added highlight rule for cells > {}{} to {}", "✓".green(), gt, bg, range.cyan());
+                println!(
+                    "{} Added highlight rule for cells > {}{} to {}",
+                    "✓".green(),
+                    gt,
+                    bg,
+                    range.cyan()
+                );
             } else if let Some(lt) = args.lt {
-                println!("{} Added highlight rule for cells < {}{} to {}", "✓".green(), lt, bg, range.cyan());
+                println!(
+                    "{} Added highlight rule for cells < {}{} to {}",
+                    "✓".green(),
+                    lt,
+                    bg,
+                    range.cyan()
+                );
             } else if let Some(eq) = args.eq {
-                println!("{} Added highlight rule for cells = {}{} to {}", "✓".green(), eq, bg, range.cyan());
+                println!(
+                    "{} Added highlight rule for cells = {}{} to {}",
+                    "✓".green(),
+                    eq,
+                    bg,
+                    range.cyan()
+                );
             }
         } else if args.color_scale {
-            let min = args.min.as_ref().map(|c| format!("#{}", c)).unwrap_or_else(|| "#FF0000".to_string());
-            let max = args.max.as_ref().map(|c| format!("#{}", c)).unwrap_or_else(|| "#00FF00".to_string());
-            println!("{} Added color scale ({} to {}) to {}", "✓".green(), min, max, range.cyan());
+            let min = args
+                .min
+                .as_ref()
+                .map(|c| format!("#{}", c))
+                .unwrap_or_else(|| "#FF0000".to_string());
+            let max = args
+                .max
+                .as_ref()
+                .map(|c| format!("#{}", c))
+                .unwrap_or_else(|| "#00FF00".to_string());
+            println!(
+                "{} Added color scale ({} to {}) to {}",
+                "✓".green(),
+                min,
+                max,
+                range.cyan()
+            );
         } else if args.data_bars {
-            let color = args.color.as_ref().map(|c| format!("#{}", c)).unwrap_or_else(|| "#4472C4".to_string());
-            println!("{} Added data bars ({}) to {}", "✓".green(), color, range.cyan());
+            let color = args
+                .color
+                .as_ref()
+                .map(|c| format!("#{}", c))
+                .unwrap_or_else(|| "#4472C4".to_string());
+            println!(
+                "{} Added data bars ({}) to {}",
+                "✓".green(),
+                color,
+                range.cyan()
+            );
         } else if let Some(ref icon_set) = args.icon_set {
-            println!("{} Added icon set '{}' to {}", "✓".green(), icon_set, range.cyan());
+            println!(
+                "{} Added icon set '{}' to {}",
+                "✓".green(),
+                icon_set,
+                range.cyan()
+            );
         }
-        println!("{}", "(Note: Full conditional formatting requires XML support)".yellow());
+        println!(
+            "{}",
+            "(Note: Full conditional formatting requires XML support)".yellow()
+        );
     }
 
     Ok(())
@@ -284,11 +356,14 @@ fn run_freeze(args: &FreezeArgs, global: &GlobalOptions) -> Result<()> {
     // Get current freeze pane status (show)
     if !args.unfreeze && args.rows.is_none() && args.cols.is_none() && args.at.is_none() {
         if global.format == OutputFormat::Json {
-            println!("{}", serde_json::json!({
-                "sheet": args.sheet,
-                "frozen_rows": 0,
-                "frozen_cols": 0,
-            }));
+            println!(
+                "{}",
+                serde_json::json!({
+                    "sheet": args.sheet,
+                    "frozen_rows": 0,
+                    "frozen_cols": 0,
+                })
+            );
         } else {
             println!("{}: No freeze panes set", args.sheet);
             println!("{}", "(Use --rows, --cols, or --at to freeze)".dimmed());
@@ -304,7 +379,10 @@ fn run_freeze(args: &FreezeArgs, global: &GlobalOptions) -> Result<()> {
         } else {
             let rows = args.rows.unwrap_or(0);
             let cols = args.cols.unwrap_or(0);
-            println!("Would freeze {} rows and {} columns in {}", rows, cols, args.sheet);
+            println!(
+                "Would freeze {} rows and {} columns in {}",
+                rows, cols, args.sheet
+            );
         }
         return Ok(());
     }
@@ -314,13 +392,27 @@ fn run_freeze(args: &FreezeArgs, global: &GlobalOptions) -> Result<()> {
         if args.unfreeze {
             println!("{} Unfroze panes in {}", "✓".green(), args.sheet.cyan());
         } else if let Some(ref cell) = args.at {
-            println!("{} Froze panes at {} in {}", "✓".green(), cell.cyan(), args.sheet.cyan());
+            println!(
+                "{} Froze panes at {} in {}",
+                "✓".green(),
+                cell.cyan(),
+                args.sheet.cyan()
+            );
         } else {
             let rows = args.rows.unwrap_or(0);
             let cols = args.cols.unwrap_or(0);
-            println!("{} Froze {} rows and {} columns in {}", "✓".green(), rows, cols, args.sheet.cyan());
+            println!(
+                "{} Froze {} rows and {} columns in {}",
+                "✓".green(),
+                rows,
+                cols,
+                args.sheet.cyan()
+            );
         }
-        println!("{}", "(Note: Full freeze pane support requires sheetViews XML)".yellow());
+        println!(
+            "{}",
+            "(Note: Full freeze pane support requires sheetViews XML)".yellow()
+        );
     }
 
     Ok(())
@@ -464,11 +556,12 @@ fn apply(
 
     // Apply style to cells
     {
-        let sheet_obj = workbook
-            .get_sheet_mut(sheet)
-            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-                name: sheet.to_string(),
-            })?;
+        let sheet_obj =
+            workbook
+                .get_sheet_mut(sheet)
+                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                    name: sheet.to_string(),
+                })?;
 
         for cell_ref in &cells {
             sheet_obj.set_cell_style(cell_ref, Some(style_id));
@@ -518,14 +611,13 @@ fn copy(
 
     // Get source style ID
     let style_id = {
-        let sheet_obj = workbook
-            .get_sheet(sheet)
-            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-                name: sheet.to_string(),
-            })?;
-        sheet_obj
-            .get_cell(&source_ref)
-            .and_then(|c| c.style_id)
+        let sheet_obj =
+            workbook
+                .get_sheet(sheet)
+                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                    name: sheet.to_string(),
+                })?;
+        sheet_obj.get_cell(&source_ref).and_then(|c| c.style_id)
     };
 
     // Parse destination (can be cell or range)
@@ -538,11 +630,12 @@ fn copy(
 
     // Apply style to destination cells
     {
-        let sheet_obj = workbook
-            .get_sheet_mut(sheet)
-            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-                name: sheet.to_string(),
-            })?;
+        let sheet_obj =
+            workbook
+                .get_sheet_mut(sheet)
+                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                    name: sheet.to_string(),
+                })?;
 
         for cell_ref in &dest_cells {
             sheet_obj.set_cell_style(cell_ref, style_id);
@@ -574,12 +667,7 @@ fn copy(
     Ok(())
 }
 
-fn clear(
-    file: &std::path::Path,
-    sheet: &str,
-    range: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn clear(file: &std::path::Path, sheet: &str, range: &str, global: &GlobalOptions) -> Result<()> {
     if global.dry_run {
         println!("Would clear style from {} in {}", range, sheet);
         return Ok(());
@@ -597,11 +685,12 @@ fn clear(
 
     // Clear style from cells
     {
-        let sheet_obj = workbook
-            .get_sheet_mut(sheet)
-            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-                name: sheet.to_string(),
-            })?;
+        let sheet_obj =
+            workbook
+                .get_sheet_mut(sheet)
+                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                    name: sheet.to_string(),
+                })?;
 
         for cell_ref in &cells {
             sheet_obj.set_cell_style(cell_ref, None);

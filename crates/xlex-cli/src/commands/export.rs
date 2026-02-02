@@ -7,6 +7,7 @@ use colored::Colorize;
 use xlex_core::Workbook;
 
 use super::GlobalOptions;
+use crate::progress::Progress;
 
 /// Arguments for export operations.
 #[derive(Parser)]
@@ -202,17 +203,33 @@ fn export_all_csv(
     global: &GlobalOptions,
 ) -> Result<()> {
     let workbook = Workbook::open(source)?;
-    let sheet_names: Vec<String> = workbook.sheet_names().iter().map(|s| s.to_string()).collect();
+    let sheet_names: Vec<String> = workbook
+        .sheet_names()
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
     // Create output directory based on dest name
     let base_path = std::path::Path::new(dest);
     let parent = base_path.parent().unwrap_or(std::path::Path::new("."));
-    let stem = base_path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "export".to_string());
-    let ext = base_path.extension().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "csv".to_string());
+    let stem = base_path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "export".to_string());
+    let ext = base_path
+        .extension()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "csv".to_string());
 
     for sheet_name in &sheet_names {
         let output_path = parent.join(format!("{}_{}.{}", stem, sheet_name.replace(' ', "_"), ext));
-        export_csv(source, &output_path.to_string_lossy(), Some(sheet_name), delimiter, global)?;
+        export_csv(
+            source,
+            &output_path.to_string_lossy(),
+            Some(sheet_name),
+            delimiter,
+            global,
+        )?;
     }
 
     if !global.quiet {
@@ -229,17 +246,22 @@ fn export_all_json(
     global: &GlobalOptions,
 ) -> Result<()> {
     let workbook = Workbook::open(source)?;
-    let sheet_names: Vec<String> = workbook.sheet_names().iter().map(|s| s.to_string()).collect();
+    let sheet_names: Vec<String> = workbook
+        .sheet_names()
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
     // Combined JSON with all sheets
     let mut combined: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
 
     for sheet_name in &sheet_names {
-        let sheet_obj = workbook
-            .get_sheet(sheet_name)
-            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-                name: sheet_name.to_string(),
-            })?;
+        let sheet_obj =
+            workbook
+                .get_sheet(sheet_name)
+                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                    name: sheet_name.to_string(),
+                })?;
 
         let (max_col, max_row) = sheet_obj.dimensions();
         let data = export_sheet_to_json_value(sheet_obj, max_col, max_row, header);
@@ -250,28 +272,44 @@ fn export_all_json(
     write_output(dest, &json_str, global)?;
 
     if !global.quiet && dest != "-" {
-        println!("{} Exported {} sheets to {}", "✓".green(), sheet_names.len(), dest);
+        println!(
+            "{} Exported {} sheets to {}",
+            "✓".green(),
+            sheet_names.len(),
+            dest
+        );
     }
 
     Ok(())
 }
 
-fn export_all_yaml(
-    source: &std::path::Path,
-    dest: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn export_all_yaml(source: &std::path::Path, dest: &str, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(source)?;
-    let sheet_names: Vec<String> = workbook.sheet_names().iter().map(|s| s.to_string()).collect();
+    let sheet_names: Vec<String> = workbook
+        .sheet_names()
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
     let base_path = std::path::Path::new(dest);
     let parent = base_path.parent().unwrap_or(std::path::Path::new("."));
-    let stem = base_path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "export".to_string());
-    let ext = base_path.extension().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "yaml".to_string());
+    let stem = base_path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "export".to_string());
+    let ext = base_path
+        .extension()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "yaml".to_string());
 
     for sheet_name in &sheet_names {
         let output_path = parent.join(format!("{}_{}.{}", stem, sheet_name.replace(' ', "_"), ext));
-        export_yaml(source, &output_path.to_string_lossy(), Some(sheet_name), global)?;
+        export_yaml(
+            source,
+            &output_path.to_string_lossy(),
+            Some(sheet_name),
+            global,
+        )?;
     }
 
     if !global.quiet {
@@ -281,22 +319,33 @@ fn export_all_yaml(
     Ok(())
 }
 
-fn export_all_markdown(
-    source: &std::path::Path,
-    dest: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn export_all_markdown(source: &std::path::Path, dest: &str, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(source)?;
-    let sheet_names: Vec<String> = workbook.sheet_names().iter().map(|s| s.to_string()).collect();
+    let sheet_names: Vec<String> = workbook
+        .sheet_names()
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
     let base_path = std::path::Path::new(dest);
     let parent = base_path.parent().unwrap_or(std::path::Path::new("."));
-    let stem = base_path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "export".to_string());
-    let ext = base_path.extension().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "md".to_string());
+    let stem = base_path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "export".to_string());
+    let ext = base_path
+        .extension()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "md".to_string());
 
     for sheet_name in &sheet_names {
         let output_path = parent.join(format!("{}_{}.{}", stem, sheet_name.replace(' ', "_"), ext));
-        export_markdown(source, &output_path.to_string_lossy(), Some(sheet_name), global)?;
+        export_markdown(
+            source,
+            &output_path.to_string_lossy(),
+            Some(sheet_name),
+            global,
+        )?;
     }
 
     if !global.quiet {
@@ -313,16 +362,32 @@ fn export_all_ndjson(
     global: &GlobalOptions,
 ) -> Result<()> {
     let workbook = Workbook::open(source)?;
-    let sheet_names: Vec<String> = workbook.sheet_names().iter().map(|s| s.to_string()).collect();
+    let sheet_names: Vec<String> = workbook
+        .sheet_names()
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
     let base_path = std::path::Path::new(dest);
     let parent = base_path.parent().unwrap_or(std::path::Path::new("."));
-    let stem = base_path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "export".to_string());
-    let ext = base_path.extension().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "ndjson".to_string());
+    let stem = base_path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "export".to_string());
+    let ext = base_path
+        .extension()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "ndjson".to_string());
 
     for sheet_name in &sheet_names {
         let output_path = parent.join(format!("{}_{}.{}", stem, sheet_name.replace(' ', "_"), ext));
-        export_ndjson(source, &output_path.to_string_lossy(), Some(sheet_name), header, global)?;
+        export_ndjson(
+            source,
+            &output_path.to_string_lossy(),
+            Some(sheet_name),
+            header,
+            global,
+        )?;
     }
 
     if !global.quiet {
@@ -404,14 +469,26 @@ fn export_csv(
         .or_else(|| workbook.sheet_names().first().copied())
         .ok_or_else(|| anyhow::anyhow!("No sheets in workbook"))?;
 
-    let sheet_obj = workbook
-        .get_sheet(sheet_name)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet_name.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet_name)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet_name.to_string(),
+            })?;
 
     // Get dimensions
     let (max_col, max_row) = sheet_obj.dimensions();
+
+    // Create progress for large exports
+    let progress = if max_row > 100 {
+        Some(Progress::bar(
+            max_row as u64,
+            "Exporting to CSV...",
+            global.quiet,
+        ))
+    } else {
+        None
+    };
 
     let mut output = String::new();
     for row in 1..=max_row {
@@ -430,6 +507,14 @@ fn export_csv(
         }
         output.push_str(&row_values.join(&delimiter.to_string()));
         output.push('\n');
+
+        if let Some(ref pb) = progress {
+            pb.inc(1);
+        }
+    }
+
+    if let Some(ref pb) = progress {
+        pb.finish_and_clear();
     }
 
     write_output(dest, &output, global)?;
@@ -453,11 +538,12 @@ fn export_json(
         .or_else(|| workbook.sheet_names().first().copied())
         .ok_or_else(|| anyhow::anyhow!("No sheets in workbook"))?;
 
-    let sheet_obj = workbook
-        .get_sheet(sheet_name)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet_name.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet_name)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet_name.to_string(),
+            })?;
 
     // Get dimensions
     let (max_col, max_row) = sheet_obj.dimensions();
@@ -527,11 +613,12 @@ fn export_yaml(
         .or_else(|| workbook.sheet_names().first().copied())
         .ok_or_else(|| anyhow::anyhow!("No sheets in workbook"))?;
 
-    let sheet_obj = workbook
-        .get_sheet(sheet_name)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet_name.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet_name)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet_name.to_string(),
+            })?;
 
     // Get dimensions
     let (max_col, max_row) = sheet_obj.dimensions();
@@ -568,11 +655,12 @@ fn export_markdown(
         .or_else(|| workbook.sheet_names().first().copied())
         .ok_or_else(|| anyhow::anyhow!("No sheets in workbook"))?;
 
-    let sheet_obj = workbook
-        .get_sheet(sheet_name)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet_name.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet_name)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet_name.to_string(),
+            })?;
 
     // Get dimensions
     let (max_col, max_row) = sheet_obj.dimensions();
@@ -645,11 +733,12 @@ fn export_ndjson(
         .or_else(|| workbook.sheet_names().first().copied())
         .ok_or_else(|| anyhow::anyhow!("No sheets in workbook"))?;
 
-    let sheet_obj = workbook
-        .get_sheet(sheet_name)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet_name.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet_name)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet_name.to_string(),
+            })?;
 
     // Get dimensions
     let (max_col, max_row) = sheet_obj.dimensions();
@@ -684,7 +773,9 @@ fn export_ndjson(
                 let value = sheet_obj.get_value(&cell_ref);
                 row_values.push(cell_to_json(&value));
             }
-            output.push_str(&serde_json::to_string(&serde_json::Value::Array(row_values))?);
+            output.push_str(&serde_json::to_string(&serde_json::Value::Array(
+                row_values,
+            ))?);
             output.push('\n');
         }
     }
@@ -692,28 +783,28 @@ fn export_ndjson(
     write_output(dest, &output, global)?;
 
     if !global.quiet && dest != "-" {
-        println!("Exported {} rows to NDJSON {}", max_row.to_string().green(), dest);
+        println!(
+            "Exported {} rows to NDJSON {}",
+            max_row.to_string().green(),
+            dest
+        );
     }
 
     Ok(())
 }
 
-fn export_meta(
-    source: &std::path::Path,
-    dest: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn export_meta(source: &std::path::Path, dest: &str, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(source)?;
 
     // Build metadata
     let mut sheets_meta: Vec<serde_json::Value> = Vec::new();
-    
+
     for name in workbook.sheet_names() {
         if let Some(sheet) = workbook.get_sheet(name) {
             let (max_col, max_row) = sheet.dimensions();
             let cell_count = sheet.cell_count();
             let merged_ranges = sheet.merged_ranges();
-            
+
             sheets_meta.push(serde_json::json!({
                 "name": name,
                 "index": sheet.info.sheet_id,

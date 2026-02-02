@@ -122,11 +122,25 @@ pub enum RowCommand {
 pub fn run(args: &RowArgs, global: &GlobalOptions) -> Result<()> {
     match &args.command {
         RowCommand::Get { file, sheet, row } => get(file, sheet, *row, global),
-        RowCommand::Append { file, sheet, values } => append(file, sheet, values, global),
+        RowCommand::Append {
+            file,
+            sheet,
+            values,
+        } => append(file, sheet, values, global),
         RowCommand::Insert { file, sheet, row } => insert(file, sheet, *row, global),
         RowCommand::Delete { file, sheet, row } => delete(file, sheet, *row, global),
-        RowCommand::Copy { file, sheet, source, dest } => copy(file, sheet, *source, *dest, global),
-        RowCommand::Move { file, sheet, source, dest } => move_row(file, sheet, *source, *dest, global),
+        RowCommand::Copy {
+            file,
+            sheet,
+            source,
+            dest,
+        } => copy(file, sheet, *source, *dest, global),
+        RowCommand::Move {
+            file,
+            sheet,
+            source,
+            dest,
+        } => move_row(file, sheet, *source, *dest, global),
         RowCommand::Height {
             file,
             sheet,
@@ -146,11 +160,12 @@ pub fn run(args: &RowArgs, global: &GlobalOptions) -> Result<()> {
 
 fn get(file: &std::path::Path, sheet: &str, row: u32, global: &GlobalOptions) -> Result<()> {
     let workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // Collect cells in this row
     let mut row_cells: Vec<_> = sheet_obj
@@ -173,7 +188,10 @@ fn get(file: &std::path::Path, sheet: &str, row: u32, global: &GlobalOptions) ->
             .collect();
         println!("{}", serde_json::to_string_pretty(&values)?);
     } else if global.format == OutputFormat::Csv {
-        let values: Vec<_> = row_cells.iter().map(|c| c.value.to_display_string()).collect();
+        let values: Vec<_> = row_cells
+            .iter()
+            .map(|c| c.value.to_display_string())
+            .collect();
         println!("{}", values.join(","));
     } else {
         for cell in row_cells {
@@ -184,23 +202,19 @@ fn get(file: &std::path::Path, sheet: &str, row: u32, global: &GlobalOptions) ->
     Ok(())
 }
 
-fn append(
-    file: &std::path::Path,
-    sheet: &str,
-    values: &str,
-    global: &GlobalOptions,
-) -> Result<()> {
+fn append(file: &std::path::Path, sheet: &str, values: &str, global: &GlobalOptions) -> Result<()> {
     if global.dry_run {
         println!("Would append row with values: {}", values);
         return Ok(());
     }
 
     let mut workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // Find the next empty row
     let mut max_row: u32 = 0;
@@ -236,11 +250,12 @@ fn insert(file: &std::path::Path, sheet: &str, row: u32, global: &GlobalOptions)
     }
 
     let mut workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     sheet_obj.insert_rows(row, 1);
     let _ = sheet_obj;
@@ -260,11 +275,12 @@ fn delete(file: &std::path::Path, sheet: &str, row: u32, global: &GlobalOptions)
     }
 
     let mut workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     sheet_obj.delete_rows(row, 1);
     let _ = sheet_obj;
@@ -292,11 +308,12 @@ fn copy(
     let mut workbook = Workbook::open(file)?;
 
     // Get source row data
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // Collect all cells in the source row
     let source_cells: Vec<_> = sheet_obj
@@ -309,11 +326,12 @@ fn copy(
     let _ = sheet_obj;
 
     // Insert a new row at destination
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     sheet_obj.insert_rows(dest, 1);
 
@@ -332,7 +350,11 @@ fn copy(
     workbook.save()?;
 
     if !global.quiet {
-        println!("Copied row {} to row {}", source.to_string().cyan(), dest.to_string().green());
+        println!(
+            "Copied row {} to row {}",
+            source.to_string().cyan(),
+            dest.to_string().green()
+        );
     }
 
     Ok(())
@@ -353,11 +375,12 @@ fn move_row(
     let mut workbook = Workbook::open(file)?;
 
     // Get source row data
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // Collect all cells in the source row
     let source_cells: Vec<_> = sheet_obj
@@ -369,11 +392,12 @@ fn move_row(
     let source_height = sheet_obj.get_row_height(source);
     let _ = sheet_obj;
 
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     // The logic differs based on whether moving up or down
     if source < dest {
@@ -413,7 +437,11 @@ fn move_row(
     workbook.save()?;
 
     if !global.quiet {
-        println!("Moved row {} to row {}", source.to_string().cyan(), dest.to_string().green());
+        println!(
+            "Moved row {} to row {}",
+            source.to_string().cyan(),
+            dest.to_string().green()
+        );
     }
 
     Ok(())
@@ -433,11 +461,12 @@ fn height(
         }
 
         let mut workbook = Workbook::open(file)?;
-        let sheet_obj = workbook
-            .get_sheet_mut(sheet)
-            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-                name: sheet.to_string(),
-            })?;
+        let sheet_obj =
+            workbook
+                .get_sheet_mut(sheet)
+                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                    name: sheet.to_string(),
+                })?;
 
         sheet_obj.set_row_height(row, h);
         let _ = sheet_obj;
@@ -448,11 +477,12 @@ fn height(
         }
     } else {
         let workbook = Workbook::open(file)?;
-        let sheet_obj = workbook
-            .get_sheet(sheet)
-            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-                name: sheet.to_string(),
-            })?;
+        let sheet_obj =
+            workbook
+                .get_sheet(sheet)
+                .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                    name: sheet.to_string(),
+                })?;
 
         if let Some(h) = sheet_obj.get_row_height(row) {
             println!("{}", h);
@@ -471,11 +501,12 @@ fn hide(file: &std::path::Path, sheet: &str, row: u32, global: &GlobalOptions) -
     }
 
     let mut workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     sheet_obj.set_row_hidden(row, true);
     let _ = sheet_obj;
@@ -495,11 +526,12 @@ fn unhide(file: &std::path::Path, sheet: &str, row: u32, global: &GlobalOptions)
     }
 
     let mut workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet_mut(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet_mut(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
     sheet_obj.set_row_hidden(row, false);
     let _ = sheet_obj;
@@ -520,15 +552,15 @@ fn find(
     global: &GlobalOptions,
 ) -> Result<()> {
     let workbook = Workbook::open(file)?;
-    let sheet_obj = workbook
-        .get_sheet(sheet)
-        .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
-            name: sheet.to_string(),
-        })?;
+    let sheet_obj =
+        workbook
+            .get_sheet(sheet)
+            .ok_or_else(|| xlex_core::XlexError::SheetNotFound {
+                name: sheet.to_string(),
+            })?;
 
-    let col_filter: Option<u32> = column.and_then(|c| {
-        xlex_core::CellRef::col_from_letters_pub(&c.to_uppercase())
-    });
+    let col_filter: Option<u32> =
+        column.and_then(|c| xlex_core::CellRef::col_from_letters_pub(&c.to_uppercase()));
 
     let mut matches: Vec<u32> = Vec::new();
     for cell in sheet_obj.cells() {
@@ -564,4 +596,3 @@ fn find(
 
     Ok(())
 }
-

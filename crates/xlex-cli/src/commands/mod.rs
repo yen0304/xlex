@@ -152,6 +152,36 @@ pub enum Commands {
 
     /// Display version information
     Version,
+
+    /// Start interactive mode (REPL)
+    Interactive,
+
+    /// Show examples for commands
+    Examples(ExamplesArgs),
+
+    /// Generate man page
+    Man(ManArgs),
+}
+
+/// Examples arguments.
+#[derive(Parser)]
+pub struct ExamplesArgs {
+    /// Command to show examples for
+    pub command: Option<String>,
+    /// Show all examples
+    #[arg(long)]
+    pub all: bool,
+}
+
+/// Man page generation arguments.
+#[derive(Parser)]
+pub struct ManArgs {
+    /// Output directory for man pages
+    #[arg(short, long, default_value = ".")]
+    pub output_dir: std::path::PathBuf,
+    /// Generate for all commands
+    #[arg(long)]
+    pub all: bool,
 }
 
 /// Convert arguments.
@@ -296,6 +326,9 @@ impl Cli {
             Commands::Batch(args) => run_batch(args, &self.global),
             Commands::Alias(args) => run_alias(args, &self.global),
             Commands::Version => run_version(&self.global),
+            Commands::Interactive => run_interactive(&self.global),
+            Commands::Examples(args) => run_examples(args, &self.global),
+            Commands::Man(args) => run_man(args, &self.global),
         }
     }
 }
@@ -490,7 +523,7 @@ fn run_config(args: &ConfigArgs, global: &GlobalOptions) -> Result<()> {
     match &args.command {
         ConfigCommand::Show { effective } => {
             let config_path = get_config_path()?;
-            
+
             if global.format == OutputFormat::Json {
                 let config = if config_path.exists() {
                     std::fs::read_to_string(&config_path)?
@@ -500,12 +533,15 @@ fn run_config(args: &ConfigArgs, global: &GlobalOptions) -> Result<()> {
                 println!("{}", config);
             } else {
                 println!("{}: {}\n", "Config file".bold(), config_path.display());
-                
+
                 if config_path.exists() {
                     let content = std::fs::read_to_string(&config_path)?;
                     println!("{}", content);
                 } else {
-                    println!("{}", "(No config file found. Run 'xlex config init' to create one.)".dimmed());
+                    println!(
+                        "{}",
+                        "(No config file found. Run 'xlex config init' to create one.)".dimmed()
+                    );
                 }
 
                 if *effective {
@@ -625,7 +661,11 @@ csv_quote: '\"'
             std::fs::write(&config_path, default_config)?;
 
             if !global.quiet {
-                println!("{} Created config file: {}", "✓".green(), config_path.display());
+                println!(
+                    "{} Created config file: {}",
+                    "✓".green(),
+                    config_path.display()
+                );
             }
         }
         ConfigCommand::Validate => {
@@ -696,7 +736,12 @@ fn run_batch(args: &BatchArgs, global: &GlobalOptions) -> Result<()> {
                     errors.push((line_num + 1, line.to_string(), stderr.clone()));
 
                     if !args.continue_on_error {
-                        anyhow::bail!("Command failed at line {}: {}\n{}", line_num + 1, line, stderr);
+                        anyhow::bail!(
+                            "Command failed at line {}: {}\n{}",
+                            line_num + 1,
+                            line,
+                            stderr
+                        );
                     }
                 }
             }
@@ -710,7 +755,8 @@ fn run_batch(args: &BatchArgs, global: &GlobalOptions) -> Result<()> {
     }
 
     if !global.quiet {
-        println!("\n{}: {} commands executed, {} failed",
+        println!(
+            "\n{}: {} commands executed, {} failed",
             "Batch complete".bold(),
             success_count,
             errors.len()
@@ -750,7 +796,7 @@ fn run_alias(args: &AliasArgs, global: &GlobalOptions) -> Result<()> {
                 } else {
                     serde_yaml::Mapping::new()
                 };
-                
+
                 println!("{}", serde_json::to_string_pretty(&aliases)?);
             } else {
                 println!("{}:\n", "Aliases".bold());
@@ -759,16 +805,19 @@ fn run_alias(args: &AliasArgs, global: &GlobalOptions) -> Result<()> {
                 println!("  {} (built-in)", "Built-in".dimmed());
                 println!("    {} → {}", "ls".cyan(), "sheet list");
                 println!("    {} → {}", "cat".cyan(), "cell get");
-                
+
                 // User aliases
                 if alias_path.exists() {
                     let content = std::fs::read_to_string(&alias_path)?;
-                    let aliases: serde_yaml::Mapping = serde_yaml::from_str(&content).unwrap_or_default();
+                    let aliases: serde_yaml::Mapping =
+                        serde_yaml::from_str(&content).unwrap_or_default();
 
                     if !aliases.is_empty() {
                         println!("\n  {} (user-defined)", "Custom".dimmed());
                         for (name, cmd) in aliases {
-                            if let (serde_yaml::Value::String(n), serde_yaml::Value::String(c)) = (name, cmd) {
+                            if let (serde_yaml::Value::String(n), serde_yaml::Value::String(c)) =
+                                (name, cmd)
+                            {
                                 println!("    {} → {}", n.cyan(), c);
                             }
                         }
@@ -819,7 +868,8 @@ fn run_alias(args: &AliasArgs, global: &GlobalOptions) -> Result<()> {
             }
 
             let content = std::fs::read_to_string(&alias_path)?;
-            let mut aliases: serde_yaml::Mapping = serde_yaml::from_str(&content).unwrap_or_default();
+            let mut aliases: serde_yaml::Mapping =
+                serde_yaml::from_str(&content).unwrap_or_default();
 
             let key = serde_yaml::Value::String(name.clone());
             if aliases.remove(&key).is_none() {
@@ -849,6 +899,578 @@ fn run_version(global: &GlobalOptions) -> Result<()> {
         println!("xlex {}", version);
     }
     Ok(())
+}
+
+fn run_interactive(global: &GlobalOptions) -> Result<()> {
+    use colored::Colorize;
+    use std::io::{BufRead, Write};
+
+    if !global.quiet {
+        println!("{}", "XLEX Interactive Mode".bold().cyan());
+        println!(
+            "Type {} for help, {} to exit",
+            "help".green(),
+            "exit".green()
+        );
+        println!();
+    }
+
+    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout();
+
+    loop {
+        print!("{} ", "xlex>".bold().green());
+        stdout.flush()?;
+
+        let mut line = String::new();
+        if stdin.lock().read_line(&mut line)? == 0 {
+            break; // EOF
+        }
+
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        match line.to_lowercase().as_str() {
+            "exit" | "quit" | "q" => {
+                if !global.quiet {
+                    println!("Goodbye!");
+                }
+                break;
+            }
+            "help" | "?" => {
+                print_interactive_help();
+            }
+            _ => {
+                // Parse and execute command
+                let args: Vec<&str> = line.split_whitespace().collect();
+                if args.is_empty() {
+                    continue;
+                }
+
+                // Build the command line with "xlex" prefix
+                let mut cmd_args = vec!["xlex"];
+                cmd_args.extend(args);
+
+                // Parse and run
+                match Cli::try_parse_from(&cmd_args) {
+                    Ok(cli) => {
+                        if let Err(e) = cli.run() {
+                            eprintln!("{}: {}", "error".red(), e);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("{}", e);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn print_interactive_help() {
+    use colored::Colorize;
+
+    println!("{}", "Interactive Mode Commands:".bold());
+    println!("  {}       - Show this help", "help".cyan());
+    println!("  {}       - Exit interactive mode", "exit".cyan());
+    println!();
+    println!("{}", "XLEX Commands (use without 'xlex' prefix):".bold());
+    println!(
+        "  {}         - Show workbook information",
+        "info <file>".cyan()
+    );
+    println!("  {}       - List sheets", "sheet list <file>".cyan());
+    println!("  {} - Get cell value", "cell get <file> <cell>".cyan());
+    println!(
+        "  {}   - Set cell value",
+        "cell set <file> <cell> <value>".cyan()
+    );
+    println!();
+    println!("{}", "Examples:".bold());
+    println!("  info test.xlsx");
+    println!("  sheet list test.xlsx");
+    println!("  cell get test.xlsx A1");
+    println!("  cell set test.xlsx A1 \"Hello World\"");
+}
+
+fn run_examples(args: &ExamplesArgs, _global: &GlobalOptions) -> Result<()> {
+    if args.all {
+        print_all_examples();
+        return Ok(());
+    }
+
+    if let Some(command) = &args.command {
+        print_command_help_with_examples(command);
+    } else {
+        print_overview_help();
+    }
+
+    Ok(())
+}
+
+fn print_overview_help() {
+    use colored::Colorize;
+
+    println!(
+        "{}",
+        "XLEX - A streaming Excel manipulation tool".bold().cyan()
+    );
+    println!();
+    println!("{}", "USAGE:".bold());
+    println!("    xlex <COMMAND> [OPTIONS]");
+    println!();
+    println!("{}", "COMMANDS:".bold());
+    println!("    {}      Show workbook information", "info".green());
+    println!("    {}     Create a new workbook", "create".green());
+    println!("    {}     Sheet operations", "sheet".green());
+    println!("    {}      Cell operations", "cell".green());
+    println!("    {}       Row operations", "row".green());
+    println!("    {}    Column operations", "column".green());
+    println!("    {}     Range operations", "range".green());
+    println!("    {}     Style operations", "style".green());
+    println!("    {}   Formula operations", "formula".green());
+    println!("    {}  Template operations", "template".green());
+    println!("    {}    Import from external format", "import".green());
+    println!("    {}    Export to external format", "export".green());
+    println!("    {}   Convert between formats", "convert".green());
+    println!();
+    println!("{}", "QUICK EXAMPLES:".bold());
+    println!("    xlex info workbook.xlsx");
+    println!("    xlex create new.xlsx");
+    println!("    xlex cell get workbook.xlsx A1");
+    println!("    xlex cell set workbook.xlsx A1 \"Hello\"");
+    println!("    xlex sheet list workbook.xlsx");
+    println!("    xlex export csv workbook.xlsx data.csv");
+    println!();
+    println!(
+        "Run {} for examples for a specific command",
+        "xlex examples <command>".yellow()
+    );
+    println!("Run {} for all examples", "xlex examples --all".yellow());
+}
+
+fn print_all_examples() {
+    use colored::Colorize;
+
+    println!("{}", "XLEX Command Examples".bold().cyan());
+    println!();
+
+    // Workbook examples
+    println!("{}", "WORKBOOK OPERATIONS:".bold());
+    println!("  # Show workbook information");
+    println!("  {} workbook.xlsx", "xlex info".green());
+    println!("  {} workbook.xlsx --format json", "xlex info".green());
+    println!();
+    println!("  # Create a new workbook");
+    println!("  {} new.xlsx", "xlex create".green());
+    println!(
+        "  {} new.xlsx --sheets Sales,Inventory,Summary",
+        "xlex create".green()
+    );
+    println!();
+    println!("  # Clone a workbook");
+    println!("  {} original.xlsx copy.xlsx", "xlex clone".green());
+    println!();
+
+    // Sheet examples
+    println!("{}", "SHEET OPERATIONS:".bold());
+    println!("  # List sheets");
+    println!("  {} workbook.xlsx", "xlex sheet list".green());
+    println!();
+    println!("  # Add a new sheet");
+    println!("  {} workbook.xlsx NewSheet", "xlex sheet add".green());
+    println!();
+    println!("  # Rename a sheet");
+    println!(
+        "  {} workbook.xlsx OldName NewName",
+        "xlex sheet rename".green()
+    );
+    println!();
+    println!("  # Remove a sheet");
+    println!(
+        "  {} workbook.xlsx SheetToRemove",
+        "xlex sheet remove".green()
+    );
+    println!();
+
+    // Cell examples
+    println!("{}", "CELL OPERATIONS:".bold());
+    println!("  # Get a cell value");
+    println!("  {} workbook.xlsx A1", "xlex cell get".green());
+    println!("  {} workbook.xlsx B2 -s Sales", "xlex cell get".green());
+    println!();
+    println!("  # Set a cell value");
+    println!(
+        "  {} workbook.xlsx A1 \"Hello World\"",
+        "xlex cell set".green()
+    );
+    println!(
+        "  {} workbook.xlsx B2 123.45 -s Sales",
+        "xlex cell set".green()
+    );
+    println!();
+    println!("  # Set a formula");
+    println!(
+        "  {} workbook.xlsx A5 \"=SUM(A1:A4)\"",
+        "xlex cell formula".green()
+    );
+    println!();
+    println!("  # Batch update cells");
+    println!(
+        "  echo 'A1=Hello' | {} workbook.xlsx",
+        "xlex cell batch".green()
+    );
+    println!();
+
+    // Row/Column examples
+    println!("{}", "ROW & COLUMN OPERATIONS:".bold());
+    println!("  # Get a row");
+    println!("  {} workbook.xlsx 1", "xlex row get".green());
+    println!();
+    println!("  # Append a row");
+    println!(
+        "  {} workbook.xlsx Value1,Value2,Value3",
+        "xlex row append".green()
+    );
+    println!();
+    println!("  # Get a column");
+    println!("  {} workbook.xlsx A", "xlex column get".green());
+    println!();
+    println!("  # Set column width");
+    println!("  {} workbook.xlsx A 20", "xlex column width".green());
+    println!();
+
+    // Range examples
+    println!("{}", "RANGE OPERATIONS:".bold());
+    println!("  # Get a range");
+    println!("  {} workbook.xlsx A1:C10", "xlex range get".green());
+    println!();
+    println!("  # Copy a range");
+    println!("  {} workbook.xlsx A1:C10 E1", "xlex range copy".green());
+    println!();
+    println!("  # Merge cells");
+    println!("  {} workbook.xlsx A1:D1", "xlex range merge".green());
+    println!();
+
+    // Import/Export examples
+    println!("{}", "IMPORT/EXPORT:".bold());
+    println!("  # Export to CSV");
+    println!("  {} workbook.xlsx output.csv", "xlex export csv".green());
+    println!();
+    println!("  # Export to JSON");
+    println!("  {} workbook.xlsx output.json", "xlex export json".green());
+    println!();
+    println!("  # Import from CSV");
+    println!("  {} data.csv workbook.xlsx", "xlex import csv".green());
+    println!();
+    println!("  # Convert between formats");
+    println!("  {} data.csv output.xlsx", "xlex convert".green());
+    println!("  {} workbook.xlsx output.json", "xlex convert".green());
+    println!();
+
+    // Template examples
+    println!("{}", "TEMPLATE OPERATIONS:".bold());
+    println!("  # Create a template");
+    println!(
+        "  {} template.xlsx --type invoice",
+        "xlex template init".green()
+    );
+    println!();
+    println!("  # List placeholders");
+    println!("  {} template.xlsx", "xlex template list".green());
+    println!();
+    println!("  # Apply template with variables");
+    println!(
+        "  {} template.xlsx output.xlsx -v vars.json",
+        "xlex template apply".green()
+    );
+    println!(
+        "  {} template.xlsx output.xlsx -D name=John -D date=2024-01-01",
+        "xlex template apply".green()
+    );
+    println!();
+    println!("  # Batch template processing");
+    println!(
+        "  {} template.xlsx output.xlsx -v data.json --per-record",
+        "xlex template apply".green()
+    );
+    println!();
+
+    // Formula examples
+    println!("{}", "FORMULA OPERATIONS:".bold());
+    println!("  # List all formulas");
+    println!("  {} workbook.xlsx", "xlex formula list".green());
+    println!();
+    println!("  # Validate formulas");
+    println!("  {} workbook.xlsx", "xlex formula validate".green());
+    println!();
+    println!("  # Get formula statistics");
+    println!("  {} workbook.xlsx", "xlex formula stats".green());
+}
+
+fn print_command_help_with_examples(command: &str) {
+    use colored::Colorize;
+
+    match command.to_lowercase().as_str() {
+        "info" => {
+            println!("{}", "xlex info - Display workbook information".bold());
+            println!();
+            println!("{}", "USAGE:".bold());
+            println!("    xlex info <FILE> [OPTIONS]");
+            println!();
+            println!("{}", "EXAMPLES:".bold());
+            println!("    xlex info workbook.xlsx");
+            println!("    xlex info workbook.xlsx --format json");
+            println!("    xlex info workbook.xlsx -v");
+        }
+        "create" => {
+            println!("{}", "xlex create - Create a new workbook".bold());
+            println!();
+            println!("{}", "USAGE:".bold());
+            println!("    xlex create <FILE> [OPTIONS]");
+            println!();
+            println!("{}", "OPTIONS:".bold());
+            println!("    --sheets <NAMES>    Comma-separated sheet names");
+            println!("    --force             Overwrite existing file");
+            println!();
+            println!("{}", "EXAMPLES:".bold());
+            println!("    xlex create new.xlsx");
+            println!("    xlex create report.xlsx --sheets Summary,Data,Charts");
+            println!("    xlex create backup.xlsx --force");
+        }
+        "sheet" => {
+            println!("{}", "xlex sheet - Sheet operations".bold());
+            println!();
+            println!("{}", "SUBCOMMANDS:".bold());
+            println!("    list    List all sheets");
+            println!("    add     Add a new sheet");
+            println!("    remove  Remove a sheet");
+            println!("    rename  Rename a sheet");
+            println!("    copy    Copy a sheet");
+            println!("    move    Move a sheet");
+            println!("    info    Show sheet information");
+            println!();
+            println!("{}", "EXAMPLES:".bold());
+            println!("    xlex sheet list workbook.xlsx");
+            println!("    xlex sheet add workbook.xlsx NewSheet");
+            println!("    xlex sheet rename workbook.xlsx OldName NewName");
+            println!("    xlex sheet copy workbook.xlsx Sheet1 Sheet1_Copy");
+            println!("    xlex sheet move workbook.xlsx Sheet1 2");
+        }
+        "cell" => {
+            println!("{}", "xlex cell - Cell operations".bold());
+            println!();
+            println!("{}", "SUBCOMMANDS:".bold());
+            println!("    get      Get cell value");
+            println!("    set      Set cell value");
+            println!("    formula  Set cell formula");
+            println!("    clear    Clear cell content");
+            println!("    batch    Batch update cells");
+            println!();
+            println!("{}", "EXAMPLES:".bold());
+            println!("    xlex cell get workbook.xlsx A1");
+            println!("    xlex cell get workbook.xlsx B2 -s Sales");
+            println!("    xlex cell set workbook.xlsx A1 \"Hello World\"");
+            println!("    xlex cell formula workbook.xlsx C10 \"=SUM(C1:C9)\"");
+            println!("    echo 'A1=Hello\\nB1=World' | xlex cell batch workbook.xlsx");
+        }
+        "template" => {
+            println!("{}", "xlex template - Template operations".bold());
+            println!();
+            println!("{}", "SUBCOMMANDS:".bold());
+            println!("    init      Create a new template");
+            println!("    list      List placeholders");
+            println!("    validate  Validate template");
+            println!("    apply     Apply template with variables");
+            println!("    preview   Preview template rendering");
+            println!();
+            println!("{}", "TEMPLATE FEATURES:".bold());
+            println!("    {{{{name}}}}                  Simple placeholder");
+            println!("    {{{{name|upper}}}}            Filter (upper, lower, currency, etc.)");
+            println!("    {{{{#if condition}}}}...{{{{/if}}}}  Conditional");
+            println!("    {{{{#row-repeat items}}}}    Row repetition");
+            println!();
+            println!("{}", "EXAMPLES:".bold());
+            println!("    xlex template init report.xlsx --type invoice");
+            println!("    xlex template list template.xlsx");
+            println!("    xlex template apply template.xlsx output.xlsx -v vars.json");
+            println!("    xlex template apply template.xlsx output.xlsx -D name=John");
+            println!("    xlex template apply template.xlsx output.xlsx --per-record -v data.json");
+        }
+        _ => {
+            println!("No detailed help available for '{}'", command);
+            println!("Run {} for general help", "xlex --help".yellow());
+        }
+    }
+}
+
+fn run_man(args: &ManArgs, global: &GlobalOptions) -> Result<()> {
+    use std::io::Write;
+
+    if global.dry_run {
+        println!("Would generate man pages in {}", args.output_dir.display());
+        return Ok(());
+    }
+
+    std::fs::create_dir_all(&args.output_dir)?;
+
+    let man_content = generate_man_page();
+    let man_path = args.output_dir.join("xlex.1");
+
+    let mut file = std::fs::File::create(&man_path)?;
+    file.write_all(man_content.as_bytes())?;
+
+    if !global.quiet {
+        println!("Generated man page: {}", man_path.display());
+    }
+
+    Ok(())
+}
+
+fn generate_man_page() -> String {
+    let version = env!("CARGO_PKG_VERSION");
+
+    format!(
+        r#".TH XLEX 1 "2024" "xlex {version}" "User Commands"
+.SH NAME
+xlex \- A streaming Excel manipulation tool
+.SH SYNOPSIS
+.B xlex
+.I COMMAND
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+XLEX is a CLI-first, streaming-based Excel manipulation tool for developers
+and automation pipelines. It can handle files up to 200MB without memory exhaustion.
+.SH COMMANDS
+.TP
+.B info \fIFILE\fR
+Display workbook information
+.TP
+.B create \fIFILE\fR
+Create a new workbook
+.TP
+.B clone \fISOURCE\fR \fIDEST\fR
+Clone a workbook
+.TP
+.B sheet \fISUBCOMMAND\fR
+Sheet operations (list, add, remove, rename, copy, move)
+.TP
+.B cell \fISUBCOMMAND\fR
+Cell operations (get, set, formula, clear, batch)
+.TP
+.B row \fISUBCOMMAND\fR
+Row operations (get, append, insert, delete)
+.TP
+.B column \fISUBCOMMAND\fR
+Column operations (get, insert, delete, width)
+.TP
+.B range \fISUBCOMMAND\fR
+Range operations (get, copy, move, merge, sort, filter)
+.TP
+.B style \fISUBCOMMAND\fR
+Style operations (list, get, apply)
+.TP
+.B formula \fISUBCOMMAND\fR
+Formula operations (list, validate, stats, refs)
+.TP
+.B template \fISUBCOMMAND\fR
+Template operations (init, list, validate, apply, preview)
+.TP
+.B import \fIFORMAT\fR \fISOURCE\fR \fIDEST\fR
+Import from external format (csv, json, ndjson)
+.TP
+.B export \fIFORMAT\fR \fISOURCE\fR \fIDEST\fR
+Export to external format (csv, json, ndjson)
+.TP
+.B convert \fIINPUT\fR \fIOUTPUT\fR
+Convert between formats
+.SH GLOBAL OPTIONS
+.TP
+.B \-q, \-\-quiet
+Suppress all output except errors
+.TP
+.B \-v, \-\-verbose
+Enable verbose output
+.TP
+.B \-f, \-\-format \fIFORMAT\fR
+Output format (text, json, csv, ndjson)
+.TP
+.B \-\-no\-color
+Disable colored output
+.TP
+.B \-\-dry\-run
+Perform a dry run without making changes
+.TP
+.B \-o, \-\-output \fIFILE\fR
+Write output to file instead of stdout
+.SH EXAMPLES
+.TP
+Show workbook information:
+.B xlex info workbook.xlsx
+.TP
+Create a new workbook:
+.B xlex create new.xlsx \-\-sheets Sales,Inventory
+.TP
+Get a cell value:
+.B xlex cell get workbook.xlsx A1
+.TP
+Set a cell value:
+.B xlex cell set workbook.xlsx A1 "Hello World"
+.TP
+Export to CSV:
+.B xlex export csv workbook.xlsx data.csv
+.TP
+Apply a template:
+.B xlex template apply template.xlsx output.xlsx \-v vars.json
+.SH EXIT STATUS
+.TP
+.B 0
+Success
+.TP
+.B 1
+General error
+.TP
+.B 2
+Invalid arguments
+.TP
+.B 10\-19
+File errors (not found, permission denied, etc.)
+.TP
+.B 20\-29
+Parse errors (invalid xlsx, corrupt file, etc.)
+.TP
+.B 30\-39
+Validation errors
+.SH ENVIRONMENT
+.TP
+.B XLEX_CONFIG
+Path to configuration file
+.TP
+.B XLEX_NO_COLOR
+Disable colored output when set to 1
+.TP
+.B XLEX_LOG_FILE
+Path to log file for error logging
+.SH FILES
+.TP
+.I ~/.config/xlex/config.yml
+User configuration file
+.TP
+.I .xlex.yml
+Project configuration file
+.SH SEE ALSO
+.BR xlsx (5)
+.SH BUGS
+Report bugs at: https://github.com/xlex/xlex/issues
+.SH AUTHORS
+XLEX Contributors
+"#,
+        version = version
+    )
 }
 
 // Re-export for use in main

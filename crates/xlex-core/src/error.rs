@@ -94,7 +94,10 @@ pub enum XlexError {
     #[error("{}: Permission denied: {path:?}", ErrorCode::PermissionDenied)]
     PermissionDenied { path: PathBuf },
 
-    #[error("{}: Invalid file extension, expected .xlsx: {path:?}", ErrorCode::InvalidExtension)]
+    #[error(
+        "{}: Invalid file extension, expected .xlsx: {path:?}",
+        ErrorCode::InvalidExtension
+    )]
     InvalidExtension { path: PathBuf },
 
     #[error("{}: I/O error: {message}", ErrorCode::IoError)]
@@ -127,7 +130,10 @@ pub enum XlexError {
     #[error("{}: Invalid range: {range}", ErrorCode::InvalidRange)]
     InvalidRange { range: String },
 
-    #[error("{}: Reference out of bounds: {reference}", ErrorCode::ReferenceOutOfBounds)]
+    #[error(
+        "{}: Reference out of bounds: {reference}",
+        ErrorCode::ReferenceOutOfBounds
+    )]
     ReferenceOutOfBounds { reference: String },
 
     // Sheet errors
@@ -137,10 +143,16 @@ pub enum XlexError {
     #[error("{}: Sheet already exists: {name}", ErrorCode::SheetAlreadyExists)]
     SheetAlreadyExists { name: String },
 
-    #[error("{}: Invalid sheet name: {name} ({reason})", ErrorCode::InvalidSheetName)]
+    #[error(
+        "{}: Invalid sheet name: {name} ({reason})",
+        ErrorCode::InvalidSheetName
+    )]
     InvalidSheetName { name: String, reason: String },
 
-    #[error("{}: Sheet index out of bounds: {index}", ErrorCode::SheetIndexOutOfBounds)]
+    #[error(
+        "{}: Sheet index out of bounds: {index}",
+        ErrorCode::SheetIndexOutOfBounds
+    )]
     SheetIndexOutOfBounds { index: usize },
 
     #[error("{}: Cannot delete the last sheet", ErrorCode::CannotDeleteLastSheet)]
@@ -156,7 +168,10 @@ pub enum XlexError {
     #[error("{}: Invalid formula: {formula} ({reason})", ErrorCode::InvalidFormula)]
     InvalidFormula { formula: String, reason: String },
 
-    #[error("{}: Circular reference detected: {path}", ErrorCode::CircularReference)]
+    #[error(
+        "{}: Circular reference detected: {path}",
+        ErrorCode::CircularReference
+    )]
     CircularReference { path: String },
 
     // Style errors
@@ -173,7 +188,10 @@ pub enum XlexError {
     #[error("{}: Invalid operation: {message}", ErrorCode::InvalidOperation)]
     InvalidOperation { message: String },
 
-    #[error("{}: Unsupported operation: {message}", ErrorCode::UnsupportedOperation)]
+    #[error(
+        "{}: Unsupported operation: {message}",
+        ErrorCode::UnsupportedOperation
+    )]
     UnsupportedOperation { message: String },
 
     // Template errors
@@ -245,6 +263,111 @@ impl XlexError {
     /// Returns the exit code to use when this error causes program termination.
     pub fn exit_code(&self) -> i32 {
         self.code() as i32
+    }
+
+    /// Returns a recovery suggestion for this error.
+    ///
+    /// Provides actionable advice to help users resolve common issues.
+    pub fn recovery_suggestion(&self) -> Option<&'static str> {
+        match self {
+            XlexError::FileNotFound { .. } => Some(
+                "Check if the file path is correct. Use `ls` to verify the file exists.",
+            ),
+            XlexError::FileExists { .. } => Some(
+                "Use --force to overwrite the existing file, or choose a different output path.",
+            ),
+            XlexError::PermissionDenied { .. } => Some(
+                "Check file permissions with `ls -la`. You may need to use `chmod` or run with elevated privileges.",
+            ),
+            XlexError::InvalidExtension { .. } => Some(
+                "Ensure the file has a .xlsx extension. Use `xlex convert` to convert from other formats.",
+            ),
+            XlexError::IoError { .. } => Some(
+                "Check disk space and file system permissions. The file may be in use by another process.",
+            ),
+            XlexError::ParseError { .. } => Some(
+                "The file may be corrupted. Try opening it in Excel to verify, or use a backup.",
+            ),
+            XlexError::InvalidZipStructure { .. } => Some(
+                "The xlsx file appears to be corrupted. Try re-downloading or restoring from backup.",
+            ),
+            XlexError::MissingRequiredEntry { .. } => Some(
+                "The xlsx file is missing required components. It may be corrupted or not a valid xlsx file.",
+            ),
+            XlexError::InvalidXml { .. } => Some(
+                "The file contains invalid XML. It may have been modified by a non-Excel application.",
+            ),
+            XlexError::InvalidReference { .. } => Some(
+                "Use A1 notation (e.g., A1, B2, AA100). Column letters are A-XFD, rows are 1-1048576.",
+            ),
+            XlexError::InvalidRange { .. } => Some(
+                "Use range notation like A1:B10. Start cell should be top-left, end cell bottom-right.",
+            ),
+            XlexError::ReferenceOutOfBounds { .. } => Some(
+                "Excel sheets support columns A-XFD (16384) and rows 1-1048576.",
+            ),
+            XlexError::SheetNotFound { .. } => Some(
+                "Use `xlex sheet list <file>` to see available sheet names.",
+            ),
+            XlexError::SheetAlreadyExists { .. } => Some(
+                "Choose a different sheet name, or use `xlex sheet remove` to delete the existing one.",
+            ),
+            XlexError::InvalidSheetName { .. } => Some(
+                "Sheet names cannot contain: \\ / ? * [ ] : and cannot exceed 31 characters.",
+            ),
+            XlexError::SheetIndexOutOfBounds { .. } => Some(
+                "Use `xlex sheet list <file>` to see the number of available sheets.",
+            ),
+            XlexError::CannotDeleteLastSheet => Some(
+                "A workbook must have at least one sheet. Add a new sheet before deleting this one.",
+            ),
+            XlexError::CellNotFound { .. } => Some(
+                "The cell may be empty. Use `xlex cell get` to check the cell value.",
+            ),
+            XlexError::InvalidCellValue { .. } => Some(
+                "Check the value format. Numbers, text, booleans, and formulas (starting with =) are supported.",
+            ),
+            XlexError::InvalidFormula { .. } => Some(
+                "Formulas must start with '='. Use `xlex formula validate` to check formula syntax.",
+            ),
+            XlexError::CircularReference { .. } => Some(
+                "Remove the circular dependency. Use `xlex formula refs` to trace cell dependencies.",
+            ),
+            XlexError::StyleNotFound { .. } => Some(
+                "Use `xlex style list <file>` to see available style IDs.",
+            ),
+            XlexError::InvalidStyle { .. } => Some(
+                "Check the style specification. Use `xlex style preset list` for preset styles.",
+            ),
+            XlexError::TemplateParseError { .. } => Some(
+                "Check template syntax. Use {{variable}}, {{#each items}}, {{#if condition}}.",
+            ),
+            XlexError::TemplateRenderError { .. } => Some(
+                "Ensure all template variables are provided in the data. Use `xlex template validate`.",
+            ),
+            XlexError::InvalidTemplateData { .. } => Some(
+                "Data must be valid JSON or YAML. Use `jq .` or `yq .` to validate.",
+            ),
+            XlexError::ConfigError { .. } => Some(
+                "Check your .xlex.yml configuration. Use `xlex config validate` to check for errors.",
+            ),
+            XlexError::InvalidConfig { .. } => Some(
+                "Review the configuration file syntax. Use `xlex config init` to create a valid template.",
+            ),
+            XlexError::OperationFailed { .. } | XlexError::InvalidOperation { .. } => Some(
+                "Check the command syntax with `xlex <command> --help` for usage information.",
+            ),
+            XlexError::UnsupportedOperation { .. } => Some(
+                "This operation is not yet supported. Check the documentation for alternatives.",
+            ),
+            XlexError::InternalError { .. } => Some(
+                "Please report this issue at https://github.com/xlex/xlex/issues with the full error message.",
+            ),
+            XlexError::NotImplemented { .. } => Some(
+                "This feature is not yet implemented. Check upcoming releases or contribute!",
+            ),
+            _ => None,
+        }
     }
 }
 
