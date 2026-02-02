@@ -2,9 +2,10 @@
 
 A streaming CLI Excel manipulation tool for developers and automation pipelines.
 
-[![CI](https://github.com/yourusername/xlex/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/xlex/actions/workflows/ci.yml)
+[![CI](https://github.com/yen0304/xlex/actions/workflows/ci.yml/badge.svg)](https://github.com/yen0304/xlex/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/xlex-cli.svg)](https://crates.io/crates/xlex-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![MSRV](https://img.shields.io/badge/MSRV-1.75-blue.svg)](https://blog.rust-lang.org/2023/12/28/Rust-1.75.0.html)
 
 ## Features
 
@@ -17,21 +18,24 @@ A streaming CLI Excel manipulation tool for developers and automation pipelines.
 
 ## Installation
 
-### Homebrew (macOS/Linux)
-
-```bash
-brew install yourusername/tap/xlex
-```
-
-### Cargo
+### Cargo (Recommended)
 
 ```bash
 cargo install xlex-cli
 ```
 
+### From Source
+
+```bash
+git clone https://github.com/yen0304/xlex.git
+cd xlex
+cargo build --release
+# Binary will be at target/release/xlex
+```
+
 ### Binary Downloads
 
-Download pre-built binaries from the [releases page](https://github.com/yourusername/xlex/releases).
+Download pre-built binaries from the [releases page](https://github.com/yen0304/xlex/releases).
 
 ## Quick Start
 
@@ -46,13 +50,16 @@ xlex cell get report.xlsx Sheet1 A1
 xlex cell set report.xlsx Sheet1 A1 "Hello, World!"
 
 # Export to CSV
-xlex to csv report.xlsx -s Sheet1 > data.csv
+xlex export csv report.xlsx -s Sheet1 > data.csv
 
 # Import from JSON
-xlex from json data.json output.xlsx
+xlex import json data.json output.xlsx
 
 # Template processing
-xlex template apply template.xlsx output.xlsx -D name="John" -D date="2024-01-15"
+xlex template apply template.xlsx output.xlsx -D name="John" -D date="2026-01-15"
+
+# Interactive mode
+xlex interactive
 ```
 
 ## Command Reference
@@ -123,13 +130,19 @@ xlex range validate <file> <sheet> <range> <rule> # Validate data
 
 ```bash
 # Export
-xlex to csv <file> [-s sheet]             # Export to CSV
-xlex to json <file> [-s sheet] [--header] # Export to JSON
-xlex to markdown <file> [-s sheet]        # Export to Markdown
+xlex export csv <file> [-s sheet]             # Export to CSV
+xlex export json <file> [-s sheet] [--header] # Export to JSON
+xlex export markdown <file> [-s sheet]        # Export to Markdown
+xlex export yaml <file> [-s sheet]            # Export to YAML
+xlex export ndjson <file> [-s sheet]          # Export to NDJSON
 
 # Import
-xlex from csv <source> <dest>             # Import CSV
-xlex from json <source> <dest>            # Import JSON
+xlex import csv <source> <dest>               # Import CSV
+xlex import json <source> <dest>              # Import JSON
+xlex import ndjson <source> <dest>            # Import NDJSON
+
+# Convert
+xlex convert <source> <dest>                  # Auto-detect formats
 ```
 
 ### Formula Operations
