@@ -42,13 +42,11 @@ This is a greenfield implementation establishing the complete XLEX CLI tool:
 - **CI/CD Workflows**: Test matrix (Linux/macOS/Windows), Release automation, Dependabot
 - **Distribution**: GitHub Releases, curl install, Homebrew, cargo, npx
 
-### Comprehensive Documentation
-- **Getting Started**: Installation (all methods), Quick start, First steps
-- **Command Reference**: All 90+ commands with synopsis, options, examples
-- **Guides**: Pipeline integration, Automation, Large files, Error handling, Templates
-- **Cookbook**: Common tasks, Data migration, Reporting, Template recipes
-- **Reference**: CLI reference, Error codes, Exit codes, Environment variables, Config file, Template syntax
-- **Development**: Architecture, Contributing, Building, Library usage
+### Minimal Documentation (Lean Approach)
+- **Getting Started**: Installation, Quick start
+- **Reference**: CLI reference, Exit codes
+- **In-CLI Help**: Comprehensive `--help` for all commands
+- **README**: Features, examples, and quick start guide
 
 ## Impact
 
@@ -64,8 +62,8 @@ This is a greenfield implementation establishing the complete XLEX CLI tool:
 3. Streaming architecture verified with 200MB test files
 4. Cross-platform builds (Linux, macOS, Windows)
 5. Distribution channels configured (cargo, brew, npx, curl)
-6. GitHub Community Standards 100% compliance
-7. Documentation site deployed with all commands documented
+6. GitHub Community Standards compliance
+7. Minimal documentation site (5 pages) with CLI reference
 8. Issue templates and CI/CD workflows operational
 9. `xlex-core` publishable as independent library on crates.io
 10. Template engine supports common report generation use cases
