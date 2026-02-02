@@ -161,16 +161,3 @@ jobs:
           npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  homebrew:
-    name: Update Homebrew
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Update Homebrew formula
-        uses: dawidd6/action-homebrew-bump-formula@v3
-        with:
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          tap: ${{ github.repository_owner }}/homebrew-tap
-          formula: xlex
-        continue-on-error: true
