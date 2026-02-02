@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://user.github.io/xlex/
+    about: Check the documentation first
+  - name: Discussions
+    url: https://github.com/yen0304/xlex/discussions
+    about: Ask questions and discuss ideas

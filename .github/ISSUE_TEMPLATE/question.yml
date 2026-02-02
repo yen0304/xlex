@@ -1,0 +1,38 @@
+name: Question
+description: Ask a question about xlex
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your interest in xlex! Before asking, please check:
+        - [Documentation](https://user.github.io/xlex/)
+        - [Existing issues](https://github.com/yen0304/xlex/issues)
+        - `xlex --help` and `xlex <command> --help`
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What would you like to know?
+      placeholder: How do I...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Any relevant context (what you're trying to achieve)
+      placeholder: I'm trying to automate Excel report generation...
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What I've tried
+      description: What have you already tried?
+      placeholder: |
+        I tried running:
+        ```
+        xlex ...
+        ```
