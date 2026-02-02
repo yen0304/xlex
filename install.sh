@@ -1,6 +1,6 @@
 #!/bin/bash
 # XLEX Installer Script
-# Usage: curl -fsSL https://raw.githubusercontent.com/user/xlex/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/yen0304/xlex/main/install.sh | bash
 #
 # Environment variables:
 #   XLEX_INSTALL_DIR - Installation directory (default: ~/.local/bin)
@@ -15,7 +15,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-REPO="user/xlex"
+REPO="yen0304/xlex"
 INSTALL_DIR="${XLEX_INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="${XLEX_VERSION:-latest}"
 

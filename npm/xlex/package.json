@@ -1,0 +1,38 @@
+{
+  "name": "xlex",
+  "version": "0.1.0",
+  "description": "A streaming CLI Excel manipulation tool for developers and automation pipelines",
+  "keywords": [
+    "excel",
+    "xlsx",
+    "spreadsheet",
+    "cli",
+    "csv",
+    "json",
+    "automation",
+    "data"
+  ],
+  "author": "yen0304",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yen0304/xlex.git"
+  },
+  "homepage": "https://github.com/yen0304/xlex",
+  "bugs": {
+    "url": "https://github.com/yen0304/xlex/issues"
+  },
+  "bin": {
+    "xlex": "bin/xlex"
+  },
+  "files": [
+    "bin",
+    "install.js"
+  ],
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}

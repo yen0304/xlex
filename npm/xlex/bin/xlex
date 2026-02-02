@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+
+const { execFileSync } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+
+const BINARY_NAME = process.platform === 'win32' ? 'xlex.exe' : 'xlex';
+const binaryPath = path.join(__dirname, BINARY_NAME);
+
+if (!fs.existsSync(binaryPath)) {
+  console.error('xlex binary not found!');
+  console.error('Try reinstalling: npm install -g xlex');
+  process.exit(1);
+}
+
+try {
+  execFileSync(binaryPath, process.argv.slice(2), {
+    stdio: 'inherit',
+    env: process.env,
+  });
+} catch (e) {
+  if (e.status !== undefined) {
+    process.exit(e.status);
+  }
+  throw e;
+}

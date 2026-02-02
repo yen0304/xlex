@@ -3,7 +3,7 @@
 A streaming CLI Excel manipulation tool for developers and automation pipelines.
 
 [![CI](https://github.com/yen0304/xlex/actions/workflows/ci.yml/badge.svg)](https://github.com/yen0304/xlex/actions/workflows/ci.yml)
-[![Crates.io](https://img.shields.io/crates/v/xlex-cli.svg)](https://crates.io/crates/xlex-cli)
+[![codecov](https://codecov.io/gh/yen0304/xlex/graph/badge.svg)](https://codecov.io/gh/yen0304/xlex)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MSRV](https://img.shields.io/badge/MSRV-1.75-blue.svg)](https://blog.rust-lang.org/2023/12/28/Rust-1.75.0.html)
 
@@ -18,7 +18,23 @@ A streaming CLI Excel manipulation tool for developers and automation pipelines.
 
 ## Installation
 
-### Cargo (Recommended)
+### Shell Script (Linux/macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yen0304/xlex/main/install.sh | bash
+```
+
+### npm
+
+```bash
+# Global install
+npm install -g xlex
+
+# Or use directly with npx (no install needed)
+npx xlex info report.xlsx
+```
+
+### Cargo
 
 ```bash
 cargo install xlex-cli
