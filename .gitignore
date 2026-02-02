@@ -1,8 +1,36 @@
 
 
-#Rust files
-*.rs.bk
+# Rust
 target/
+**/*.rs.bk
+Cargo.lock
+*.pdb
 
-#VsCode files
+# IDE
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+*.xlsx.tmp
+/tests/fixtures/generated/
+cobertura.xml
+
+# Build
+/dist/
+*.tar.gz
+*.zip
+
+# Logs
+*.log
+/logs/
+
+# Environment
+.env
+.env.local

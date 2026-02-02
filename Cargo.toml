@@ -8,11 +8,11 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["XLEX Contributors"]
+authors = ["yen0304"]
 license = "MIT"
-repository = "https://github.com/xlex/xlex"
-homepage = "https://xlex.sh"
-documentation = "https://docs.xlex.sh"
+repository = "https://github.com/yen0304/xlex"
+homepage = "https://github.com/yen0304/xlex"
+documentation = "https://yen0304.github.io/xlex"
 readme = "README.md"
 keywords = ["excel", "xlsx", "cli", "spreadsheet", "automation"]
 categories = ["command-line-utilities", "parser-implementations"]
@@ -50,6 +50,10 @@ dirs = "5.0"
 
 # Testing
 tempfile = "3.10"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# Dev tools
+cargo-husky = { version = "1", features = ["precommit-hook", "run-cargo-fmt", "run-cargo-clippy", "run-cargo-test"] }
 
 [profile.release]
 lto = true

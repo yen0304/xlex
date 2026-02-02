@@ -40,3 +40,4 @@ regex-lite = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+cargo-husky = { workspace = true }
