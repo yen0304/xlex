@@ -389,3 +389,297 @@ pub fn stats(args: &StatsArgs, global: &GlobalOptions) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn default_global() -> GlobalOptions {
+        GlobalOptions {
+            quiet: true,
+            verbose: false,
+            format: OutputFormat::Text,
+            no_color: true,
+            color: false,
+            json_errors: false,
+            dry_run: false,
+            output: None,
+        }
+    }
+
+    #[test]
+    fn test_create_workbook() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.xlsx");
+
+        let args = CreateArgs {
+            file: file_path.clone(),
+            sheet: "Sheet1".to_string(),
+            sheets: None,
+            force: false,
+        };
+
+        let result = create(&args, &default_global());
+        assert!(result.is_ok());
+        assert!(file_path.exists());
+    }
+
+    #[test]
+    fn test_create_workbook_with_multiple_sheets() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test_multi.xlsx");
+
+        let args = CreateArgs {
+            file: file_path.clone(),
+            sheet: "Sheet1".to_string(),
+            sheets: Some("Data,Summary,Config".to_string()),
+            force: false,
+        };
+
+        let result = create(&args, &default_global());
+        assert!(result.is_ok());
+
+        // Verify sheets were created
+        let wb = Workbook::open(&file_path).unwrap();
+        assert_eq!(wb.sheet_count(), 3);
+    }
+
+    #[test]
+    fn test_create_workbook_exists_no_force() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("existing.xlsx");
+
+        // Create first
+        let args = CreateArgs {
+            file: file_path.clone(),
+            sheet: "Sheet1".to_string(),
+            sheets: None,
+            force: false,
+        };
+        create(&args, &default_global()).unwrap();
+
+        // Try to create again without force
+        let result = create(&args, &default_global());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_workbook_exists_with_force() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("overwrite.xlsx");
+
+        // Create first
+        let args = CreateArgs {
+            file: file_path.clone(),
+            sheet: "Sheet1".to_string(),
+            sheets: None,
+            force: false,
+        };
+        create(&args, &default_global()).unwrap();
+
+        // Create again with force
+        let args = CreateArgs {
+            file: file_path.clone(),
+            sheet: "NewSheet".to_string(),
+            sheets: None,
+            force: true,
+        };
+        let result = create(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_create_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("dry_run.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let args = CreateArgs {
+            file: file_path.clone(),
+            sheet: "Sheet1".to_string(),
+            sheets: None,
+            force: false,
+        };
+
+        let result = create(&args, &global);
+        assert!(result.is_ok());
+        // File should not be created
+        assert!(!file_path.exists());
+    }
+
+    #[test]
+    fn test_validate_valid_workbook() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("valid.xlsx");
+
+        // Create a valid workbook
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let args = ValidateArgs { file: file_path };
+
+        let result = validate(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_invalid_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("invalid.xlsx");
+
+        // Create an invalid file
+        std::fs::write(&file_path, "not a valid xlsx").unwrap();
+
+        let args = ValidateArgs { file: file_path };
+
+        let result = validate(&args, &default_global());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("valid_json.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let args = ValidateArgs { file: file_path };
+
+        let result = validate(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clone_workbook() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("source.xlsx");
+        let dest_path = temp_dir.path().join("dest.xlsx");
+
+        // Create source
+        let wb = Workbook::new();
+        wb.save_as(&source_path).unwrap();
+
+        let args = CloneArgs {
+            source: source_path.clone(),
+            dest: dest_path.clone(),
+            force: false,
+        };
+
+        let result = clone(&args, &default_global());
+        assert!(result.is_ok());
+        assert!(dest_path.exists());
+    }
+
+    #[test]
+    fn test_clone_dest_exists_no_force() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("source.xlsx");
+        let dest_path = temp_dir.path().join("dest.xlsx");
+
+        // Create both files
+        let wb = Workbook::new();
+        wb.save_as(&source_path).unwrap();
+        wb.save_as(&dest_path).unwrap();
+
+        let args = CloneArgs {
+            source: source_path,
+            dest: dest_path,
+            force: false,
+        };
+
+        let result = clone(&args, &default_global());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_clone_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("source.xlsx");
+        let dest_path = temp_dir.path().join("dest_dry.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&source_path).unwrap();
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let args = CloneArgs {
+            source: source_path,
+            dest: dest_path.clone(),
+            force: false,
+        };
+
+        let result = clone(&args, &global);
+        assert!(result.is_ok());
+        assert!(!dest_path.exists());
+    }
+
+    #[test]
+    fn test_info() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("info.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let args = InfoArgs { file: file_path };
+
+        let result = info(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_info_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("info_json.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let args = InfoArgs { file: file_path };
+
+        let result = info(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_stats() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("stats.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let args = StatsArgs { file: file_path };
+
+        let result = stats(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_stats_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("stats_json.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let args = StatsArgs { file: file_path };
+
+        let result = stats(&args, &global);
+        assert!(result.is_ok());
+    }
+}

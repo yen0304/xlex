@@ -1,11 +1,19 @@
 # xlex
 
-A streaming CLI Excel manipulation tool for developers and automation pipelines.
+<p align="center">
+  <img src="logo.png" alt="xlex logo" width="640">
+</p>
 
-[![CI](https://github.com/yen0304/xlex/actions/workflows/ci.yml/badge.svg)](https://github.com/yen0304/xlex/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/yen0304/xlex/graph/badge.svg)](https://codecov.io/gh/yen0304/xlex)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![MSRV](https://img.shields.io/badge/MSRV-1.75-blue.svg)](https://blog.rust-lang.org/2023/12/28/Rust-1.75.0.html)
+<p align="center">
+  <strong>A streaming CLI Excel manipulation tool for developers and automation pipelines.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/yen0304/xlex/actions/workflows/ci.yml"><img src="https://github.com/yen0304/xlex/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/yen0304/xlex"><img src="https://codecov.io/gh/yen0304/xlex/graph/badge.svg" alt="codecov"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://blog.rust-lang.org/2023/12/28/Rust-1.75.0.html"><img src="https://img.shields.io/badge/MSRV-1.75-blue.svg" alt="MSRV"></a>
+</p>
 
 ## Features
 
