@@ -23,6 +23,12 @@ categories = ["command-line-utilities", "parser-implementations"]
 zip = "2.2"  # Updated for MSRV 1.80 compatibility
 quick-xml = "0.36"
 time = ">=0.3.20, <0.3.37"  # Pin to avoid edition2024 requirement (MSRV 1.80)
+crc = "3.2"  # MSRV guard: newer releases require Rust 1.83+
+indexmap = "2.2"  # MSRV guard: 2.13+ requires Rust 1.82+
+pest = "2.7"  # MSRV guard: 2.8+ requires Rust 1.83+
+pest_derive = "2.7"
+pest_generator = "2.7"
+pest_meta = "2.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
