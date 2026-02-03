@@ -376,6 +376,11 @@ impl StyleRegistry {
         self.number_formats.get(&id).map(|s| s.as_str())
     }
 
+    /// Returns all number formats.
+    pub fn number_formats(&self) -> &HashMap<u32, String> {
+        &self.number_formats
+    }
+
     /// Adds a number format and returns its ID.
     pub fn add_number_format(&mut self, id: u32, code: impl Into<String>) {
         self.number_formats.insert(id, code.into());
@@ -394,10 +399,60 @@ mod tests {
     }
 
     #[test]
+    fn test_color_rgb_black() {
+        let color = Color::rgb(0, 0, 0);
+        assert_eq!(color.to_rgb(), Some((0, 0, 0)));
+        assert_eq!(color.to_hex(), Some("000000".to_string()));
+    }
+
+    #[test]
+    fn test_color_rgb_white() {
+        let color = Color::rgb(255, 255, 255);
+        assert_eq!(color.to_rgb(), Some((255, 255, 255)));
+        assert_eq!(color.to_hex(), Some("FFFFFF".to_string()));
+    }
+
+    #[test]
     fn test_color_from_hex() {
         assert_eq!(Color::from_hex("FF0000"), Some(Color::Rgb(0xFF0000)));
         assert_eq!(Color::from_hex("#00FF00"), Some(Color::Rgb(0x00FF00)));
         assert_eq!(Color::from_hex("FFFF8000"), Some(Color::Rgb(0xFF8000))); // ARGB
+        assert_eq!(Color::from_hex("0000FF"), Some(Color::Rgb(0x0000FF)));
+    }
+
+    #[test]
+    fn test_color_from_hex_invalid() {
+        assert_eq!(Color::from_hex(""), None);
+        assert_eq!(Color::from_hex("FF"), None);
+        assert_eq!(Color::from_hex("FFFFF"), None);
+        assert_eq!(Color::from_hex("GGGGGG"), None); // Invalid hex chars
+    }
+
+    #[test]
+    fn test_color_theme() {
+        let color = Color::Theme(5);
+        assert_eq!(color.to_rgb(), None);
+        assert_eq!(color.to_hex(), None);
+    }
+
+    #[test]
+    fn test_color_indexed() {
+        let color = Color::Indexed(10);
+        assert_eq!(color.to_rgb(), None);
+        assert_eq!(color.to_hex(), None);
+    }
+
+    #[test]
+    fn test_color_auto() {
+        let color = Color::Auto;
+        assert_eq!(color.to_rgb(), None);
+        assert_eq!(color.to_hex(), None);
+    }
+
+    #[test]
+    fn test_color_default() {
+        let color = Color::default();
+        assert_eq!(color, Color::Auto);
     }
 
     #[test]
@@ -407,6 +462,18 @@ mod tests {
         assert_eq!(border.right.style, BorderStyle::Thin);
         assert_eq!(border.top.style, BorderStyle::Thin);
         assert_eq!(border.bottom.style, BorderStyle::Thin);
+        assert_eq!(border.diagonal.style, BorderStyle::None); // diagonal not set by all()
+    }
+
+    #[test]
+    fn test_border_default() {
+        let border = Border::default();
+        assert_eq!(border.left.style, BorderStyle::None);
+        assert_eq!(border.right.style, BorderStyle::None);
+        assert_eq!(border.top.style, BorderStyle::None);
+        assert_eq!(border.bottom.style, BorderStyle::None);
+        assert!(!border.diagonal_up);
+        assert!(!border.diagonal_down);
     }
 
     #[test]
@@ -421,5 +488,193 @@ mod tests {
 
         let retrieved = registry.get(id).unwrap();
         assert_eq!(retrieved, &style);
+
+        // Add another style
+        let id2 = registry.add(Style::default());
+        assert_eq!(id2, 1);
+        assert_eq!(registry.len(), 2);
+    }
+
+    #[test]
+    fn test_style_registry_get_nonexistent() {
+        let registry = StyleRegistry::new();
+        assert!(registry.get(999).is_none());
+    }
+
+    #[test]
+    fn test_style_registry_iter() {
+        let mut registry = StyleRegistry::new();
+        registry.add(Style::default());
+        registry.add(Style::default());
+        registry.add(Style::default());
+
+        let items: Vec<_> = registry.iter().collect();
+        assert_eq!(items.len(), 3);
+    }
+
+    #[test]
+    fn test_style_registry_fonts() {
+        let mut registry = StyleRegistry::new();
+
+        assert!(registry.fonts().is_empty());
+
+        let font = Font {
+            name: Some("Arial".to_string()),
+            size: Some(12.0),
+            bold: true,
+            ..Default::default()
+        };
+
+        let idx = registry.add_font(font);
+        assert_eq!(idx, 0);
+        assert_eq!(registry.fonts().len(), 1);
+        assert_eq!(registry.fonts()[0].name, Some("Arial".to_string()));
+    }
+
+    #[test]
+    fn test_style_registry_fills() {
+        let mut registry = StyleRegistry::new();
+
+        assert!(registry.fills().is_empty());
+
+        let fill = Fill {
+            pattern: FillPattern::Solid,
+            fg_color: Some(Color::rgb(255, 0, 0)),
+            bg_color: None,
+        };
+
+        let idx = registry.add_fill(fill);
+        assert_eq!(idx, 0);
+        assert_eq!(registry.fills().len(), 1);
+    }
+
+    #[test]
+    fn test_style_registry_borders() {
+        let mut registry = StyleRegistry::new();
+
+        assert!(registry.borders().is_empty());
+
+        let border = Border::all(BorderStyle::Medium, None);
+        let idx = registry.add_border(border);
+        assert_eq!(idx, 0);
+        assert_eq!(registry.borders().len(), 1);
+    }
+
+    #[test]
+    fn test_style_registry_number_formats() {
+        let mut registry = StyleRegistry::new();
+
+        registry.add_number_format(164, "0.00%");
+        registry.add_number_format(165, "#,##0.00");
+
+        assert_eq!(registry.get_number_format(164), Some("0.00%"));
+        assert_eq!(registry.get_number_format(165), Some("#,##0.00"));
+        assert_eq!(registry.get_number_format(999), None);
+    }
+
+    #[test]
+    fn test_number_format_general() {
+        let fmt = NumberFormat::general();
+        assert_eq!(fmt.id, Some(0));
+        assert!(fmt.code.is_none());
+    }
+
+    #[test]
+    fn test_number_format_number() {
+        let fmt0 = NumberFormat::number(0);
+        assert_eq!(fmt0.code, Some("0".to_string()));
+
+        let fmt2 = NumberFormat::number(2);
+        assert_eq!(fmt2.code, Some("0.00".to_string()));
+
+        let fmt4 = NumberFormat::number(4);
+        assert_eq!(fmt4.code, Some("0.0000".to_string()));
+    }
+
+    #[test]
+    fn test_number_format_percentage() {
+        let fmt0 = NumberFormat::percentage(0);
+        assert_eq!(fmt0.code, Some("0%".to_string()));
+
+        let fmt2 = NumberFormat::percentage(2);
+        assert_eq!(fmt2.code, Some("0.00%".to_string()));
+    }
+
+    #[test]
+    fn test_number_format_date() {
+        let fmt = NumberFormat::date();
+        assert_eq!(fmt.id, Some(14));
+        assert!(fmt.code.is_none());
+    }
+
+    #[test]
+    fn test_number_format_custom() {
+        let fmt = NumberFormat::custom("yyyy-mm-dd hh:mm:ss");
+        assert!(fmt.id.is_none());
+        assert_eq!(fmt.code, Some("yyyy-mm-dd hh:mm:ss".to_string()));
+    }
+
+    #[test]
+    fn test_number_format_default() {
+        let fmt = NumberFormat::default();
+        assert_eq!(fmt, NumberFormat::general());
+    }
+
+    #[test]
+    fn test_font_default() {
+        let font = Font::default();
+        assert!(font.name.is_none());
+        assert!(font.size.is_none());
+        assert!(!font.bold);
+        assert!(!font.italic);
+        assert!(!font.underline);
+        assert!(!font.strikethrough);
+        assert!(font.color.is_none());
+    }
+
+    #[test]
+    fn test_fill_default() {
+        let fill = Fill::default();
+        assert_eq!(fill.pattern, FillPattern::None);
+        assert!(fill.fg_color.is_none());
+        assert!(fill.bg_color.is_none());
+    }
+
+    #[test]
+    fn test_style_default() {
+        let style = Style::default();
+        assert_eq!(style.horizontal_alignment, HorizontalAlignment::General);
+        assert_eq!(style.vertical_alignment, VerticalAlignment::Center);
+        assert!(!style.wrap_text);
+        assert!(style.text_rotation.is_none());
+        assert!(style.indent.is_none());
+        assert!(!style.shrink_to_fit);
+    }
+
+    #[test]
+    fn test_horizontal_alignment_default() {
+        assert_eq!(HorizontalAlignment::default(), HorizontalAlignment::General);
+    }
+
+    #[test]
+    fn test_vertical_alignment_default() {
+        assert_eq!(VerticalAlignment::default(), VerticalAlignment::Center);
+    }
+
+    #[test]
+    fn test_border_style_default() {
+        assert_eq!(BorderStyle::default(), BorderStyle::None);
+    }
+
+    #[test]
+    fn test_fill_pattern_default() {
+        assert_eq!(FillPattern::default(), FillPattern::None);
+    }
+
+    #[test]
+    fn test_border_side_default() {
+        let side = BorderSide::default();
+        assert_eq!(side.style, BorderStyle::None);
+        assert!(side.color.is_none());
     }
 }

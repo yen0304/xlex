@@ -238,6 +238,15 @@ mod tests {
     }
 
     #[test]
+    fn test_range_parse_full_column_range() {
+        let range = Range::parse("A:C").unwrap();
+        assert_eq!(range.start.col, 1);
+        assert_eq!(range.end.col, 3);
+        assert_eq!(range.start.row, 1);
+        assert_eq!(range.end.row, CellRef::MAX_ROW);
+    }
+
+    #[test]
     fn test_range_parse_full_row() {
         let range = Range::parse("1:1").unwrap();
         assert_eq!(range.start.col, 1);
@@ -247,10 +256,22 @@ mod tests {
     }
 
     #[test]
+    fn test_range_parse_full_row_range() {
+        let range = Range::parse("1:10").unwrap();
+        assert_eq!(range.start.col, 1);
+        assert_eq!(range.end.col, CellRef::MAX_COL);
+        assert_eq!(range.start.row, 1);
+        assert_eq!(range.end.row, 10);
+    }
+
+    #[test]
     fn test_range_parse_invalid() {
         assert!(Range::parse("").is_err());
         assert!(Range::parse("B1:A1").is_err()); // End before start
         assert!(Range::parse("A10:A1").is_err()); // End row before start row
+        assert!(Range::parse("C:A").is_err()); // End column before start column
+        assert!(Range::parse("10:1").is_err()); // End row before start row (full row)
+        assert!(Range::parse("0:1").is_err()); // Row 0 is invalid
     }
 
     #[test]
@@ -262,13 +283,43 @@ mod tests {
     }
 
     #[test]
+    fn test_range_dimensions_single_cell() {
+        let range = Range::single(CellRef::new(5, 5));
+        assert_eq!(range.width(), 1);
+        assert_eq!(range.height(), 1);
+        assert_eq!(range.cell_count(), 1);
+    }
+
+    #[test]
+    fn test_range_dimensions_large() {
+        let range = Range::parse("A1:Z100").unwrap();
+        assert_eq!(range.width(), 26);
+        assert_eq!(range.height(), 100);
+        assert_eq!(range.cell_count(), 2600);
+    }
+
+    #[test]
     fn test_range_contains() {
         let range = Range::parse("B2:D4").unwrap();
-        assert!(range.contains(&CellRef::new(2, 2)));
+        assert!(range.contains(&CellRef::new(2, 2))); // Start
+        assert!(range.contains(&CellRef::new(3, 3))); // Middle
+        assert!(range.contains(&CellRef::new(4, 4))); // End
+        assert!(!range.contains(&CellRef::new(1, 1))); // Before start
+        assert!(!range.contains(&CellRef::new(5, 5))); // After end
+        assert!(!range.contains(&CellRef::new(1, 3))); // Left of range
+        assert!(!range.contains(&CellRef::new(5, 3))); // Right of range
+        assert!(!range.contains(&CellRef::new(3, 1))); // Above range
+        assert!(!range.contains(&CellRef::new(3, 5))); // Below range
+    }
+
+    #[test]
+    fn test_range_contains_single_cell() {
+        let range = Range::single(CellRef::new(3, 3));
         assert!(range.contains(&CellRef::new(3, 3)));
-        assert!(range.contains(&CellRef::new(4, 4)));
-        assert!(!range.contains(&CellRef::new(1, 1)));
-        assert!(!range.contains(&CellRef::new(5, 5)));
+        assert!(!range.contains(&CellRef::new(2, 3)));
+        assert!(!range.contains(&CellRef::new(4, 3)));
+        assert!(!range.contains(&CellRef::new(3, 2)));
+        assert!(!range.contains(&CellRef::new(3, 4)));
     }
 
     #[test]
@@ -287,8 +338,115 @@ mod tests {
     }
 
     #[test]
+    fn test_range_iterator_single() {
+        let range = Range::single(CellRef::new(5, 5));
+        let cells: Vec<CellRef> = range.cells().collect();
+        assert_eq!(cells, vec![CellRef::new(5, 5)]);
+    }
+
+    #[test]
+    fn test_range_iterator_row() {
+        let range = Range::parse("A1:C1").unwrap();
+        let cells: Vec<CellRef> = range.cells().collect();
+        assert_eq!(
+            cells,
+            vec![CellRef::new(1, 1), CellRef::new(2, 1), CellRef::new(3, 1)]
+        );
+    }
+
+    #[test]
+    fn test_range_iterator_column() {
+        let range = Range::parse("A1:A3").unwrap();
+        let cells: Vec<CellRef> = range.cells().collect();
+        assert_eq!(
+            cells,
+            vec![CellRef::new(1, 1), CellRef::new(1, 2), CellRef::new(1, 3)]
+        );
+    }
+
+    #[test]
+    fn test_range_iterator_size_hint() {
+        let range = Range::parse("A1:C3").unwrap();
+        let iter = range.cells();
+        assert_eq!(iter.size_hint(), (9, Some(9)));
+        assert_eq!(iter.len(), 9);
+    }
+
+    #[test]
     fn test_range_to_a1() {
         assert_eq!(Range::parse("A1:B10").unwrap().to_a1(), "A1:B10");
         assert_eq!(Range::parse("A1").unwrap().to_a1(), "A1");
+        assert_eq!(Range::parse("AA1:ZZ100").unwrap().to_a1(), "AA1:ZZ100");
+    }
+
+    #[test]
+    fn test_range_display() {
+        let range = Range::parse("A1:B10").unwrap();
+        assert_eq!(format!("{}", range), "A1:B10");
+
+        let single = Range::single(CellRef::new(3, 5));
+        assert_eq!(format!("{}", single), "C5");
+    }
+
+    #[test]
+    fn test_range_from_str() {
+        let range: Range = "A1:B10".parse().unwrap();
+        assert_eq!(range.start, CellRef::new(1, 1));
+        assert_eq!(range.end, CellRef::new(2, 10));
+
+        // Invalid should fail
+        assert!("invalid".parse::<Range>().is_err());
+    }
+
+    #[test]
+    fn test_range_new() {
+        let range = Range::new(CellRef::new(1, 1), CellRef::new(3, 5));
+        assert_eq!(range.start, CellRef::new(1, 1));
+        assert_eq!(range.end, CellRef::new(3, 5));
+    }
+
+    #[test]
+    fn test_range_single() {
+        let cell = CellRef::new(5, 10);
+        let range = Range::single(cell.clone());
+        assert_eq!(range.start, cell);
+        assert_eq!(range.end, cell);
+        assert!(range.is_single());
+    }
+
+    #[test]
+    fn test_range_equality_and_hash() {
+        use std::collections::HashSet;
+
+        let range1 = Range::parse("A1:B10").unwrap();
+        let range2 = Range::parse("A1:B10").unwrap();
+        let range3 = Range::parse("A1:C10").unwrap();
+
+        assert_eq!(range1, range2);
+        assert_ne!(range1, range3);
+
+        let mut set = HashSet::new();
+        set.insert(range1.clone());
+        assert!(set.contains(&range2));
+        assert!(!set.contains(&range3));
+    }
+
+    #[test]
+    fn test_range_parse_whitespace() {
+        let range = Range::parse("  A1:B10  ").unwrap();
+        assert_eq!(range.start, CellRef::new(1, 1));
+        assert_eq!(range.end, CellRef::new(2, 10));
+    }
+
+    #[test]
+    fn test_range_full_column_invalid() {
+        // Column range with end before start
+        assert!(Range::parse("Z:A").is_err());
+    }
+
+    #[test]
+    fn test_range_full_row_zero() {
+        // Row 0 is invalid
+        assert!(Range::parse("0:10").is_err());
     }
 }

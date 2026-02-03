@@ -553,4 +553,178 @@ mod tests {
         let value = parser.parse_cell_value("#VALUE!", "", Some("e"), &[]);
         assert_eq!(value, CellValue::Error(CellError::Value));
     }
+
+    #[test]
+    fn test_default_trait() {
+        let _parser = WorkbookParser::default();
+    }
+
+    #[test]
+    fn test_parse_cell_value_boolean_true_string() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("true", "", Some("b"), &[]);
+        assert_eq!(value, CellValue::Boolean(true));
+    }
+
+    #[test]
+    fn test_parse_cell_value_boolean_false_string() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("false", "", Some("b"), &[]);
+        assert_eq!(value, CellValue::Boolean(false));
+    }
+
+    #[test]
+    fn test_parse_cell_value_empty() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("", "", None, &[]);
+        assert_eq!(value, CellValue::Empty);
+    }
+
+    #[test]
+    fn test_parse_cell_value_inline_string() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("Inline Text", "", Some("str"), &[]);
+        assert_eq!(value, CellValue::String("Inline Text".to_string()));
+
+        let value = parser.parse_cell_value("Another Inline", "", Some("inlineStr"), &[]);
+        assert_eq!(value, CellValue::String("Another Inline".to_string()));
+    }
+
+    #[test]
+    fn test_parse_cell_value_shared_string_second() {
+        let parser = WorkbookParser::new();
+        let strings = vec![
+            "First".to_string(),
+            "Second".to_string(),
+            "Third".to_string(),
+        ];
+        let value = parser.parse_cell_value("1", "", Some("s"), &strings);
+        assert_eq!(value, CellValue::String("Second".to_string()));
+    }
+
+    #[test]
+    fn test_parse_cell_value_shared_string_invalid_index() {
+        let parser = WorkbookParser::new();
+        let strings = vec!["Only".to_string()];
+        let value = parser.parse_cell_value("99", "", Some("s"), &strings);
+        assert_eq!(value, CellValue::Empty);
+    }
+
+    #[test]
+    fn test_parse_cell_value_shared_string_non_numeric() {
+        let parser = WorkbookParser::new();
+        let strings = vec!["Test".to_string()];
+        let value = parser.parse_cell_value("not_a_number", "", Some("s"), &strings);
+        assert_eq!(value, CellValue::Empty);
+    }
+
+    #[test]
+    fn test_parse_cell_value_integer() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("100", "", None, &[]);
+        assert_eq!(value, CellValue::Number(100.0));
+    }
+
+    #[test]
+    fn test_parse_cell_value_negative_number() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("-42.5", "", None, &[]);
+        assert_eq!(value, CellValue::Number(-42.5));
+    }
+
+    #[test]
+    fn test_parse_cell_value_scientific_notation() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("1.5e10", "", None, &[]);
+        assert_eq!(value, CellValue::Number(1.5e10));
+    }
+
+    #[test]
+    fn test_parse_cell_value_non_numeric_string() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("Hello World", "", None, &[]);
+        assert_eq!(value, CellValue::String("Hello World".to_string()));
+    }
+
+    #[test]
+    fn test_parse_cell_value_formula_with_cached_result() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("42", "A1+B1", None, &[]);
+        match value {
+            CellValue::Formula {
+                formula,
+                cached_result,
+            } => {
+                assert_eq!(formula, "A1+B1");
+                assert!(cached_result.is_some());
+            }
+            _ => panic!("Expected formula"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cell_value_formula_without_cached_result() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("", "A1+B1", None, &[]);
+        match value {
+            CellValue::Formula {
+                formula,
+                cached_result,
+            } => {
+                assert_eq!(formula, "A1+B1");
+                assert!(cached_result.is_none());
+            }
+            _ => panic!("Expected formula"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cell_value_error_div_zero() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("#DIV/0!", "", Some("e"), &[]);
+        assert_eq!(value, CellValue::Error(CellError::DivZero));
+    }
+
+    #[test]
+    fn test_parse_cell_value_error_ref() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("#REF!", "", Some("e"), &[]);
+        assert_eq!(value, CellValue::Error(CellError::Ref));
+    }
+
+    #[test]
+    fn test_parse_cell_value_error_name() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("#NAME?", "", Some("e"), &[]);
+        assert_eq!(value, CellValue::Error(CellError::Name));
+    }
+
+    #[test]
+    fn test_parse_cell_value_error_na() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("#N/A", "", Some("e"), &[]);
+        assert_eq!(value, CellValue::Error(CellError::Na));
+    }
+
+    #[test]
+    fn test_parse_cell_value_error_null() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("#NULL!", "", Some("e"), &[]);
+        assert_eq!(value, CellValue::Error(CellError::Null));
+    }
+
+    #[test]
+    fn test_parse_cell_value_error_num() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("#NUM!", "", Some("e"), &[]);
+        assert_eq!(value, CellValue::Error(CellError::Num));
+    }
+
+    #[test]
+    fn test_parse_cell_value_error_unknown() {
+        let parser = WorkbookParser::new();
+        let value = parser.parse_cell_value("#UNKNOWN!", "", Some("e"), &[]);
+        // Unknown error should return Empty based on parse implementation
+        assert_eq!(value, CellValue::Empty);
+    }
 }

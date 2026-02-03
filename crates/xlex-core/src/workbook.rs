@@ -682,6 +682,15 @@ mod tests {
         let wb = Workbook::new();
         assert_eq!(wb.sheet_count(), 1);
         assert_eq!(wb.sheet_names(), vec!["Sheet1"]);
+        assert!(wb.is_modified());
+        assert!(wb.path().is_none());
+    }
+
+    #[test]
+    fn test_workbook_default() {
+        let wb = Workbook::default();
+        assert_eq!(wb.sheet_count(), 1);
+        assert_eq!(wb.sheet_names(), vec!["Sheet1"]);
     }
 
     #[test]
@@ -692,9 +701,18 @@ mod tests {
     }
 
     #[test]
+    fn test_workbook_with_empty_sheets() {
+        // Should create default sheet when empty array provided
+        let wb = Workbook::with_sheets(&[]);
+        assert_eq!(wb.sheet_count(), 1);
+        assert_eq!(wb.sheet_names(), vec!["Sheet1"]);
+    }
+
+    #[test]
     fn test_add_sheet() {
         let mut wb = Workbook::new();
-        wb.add_sheet("NewSheet").unwrap();
+        let index = wb.add_sheet("NewSheet").unwrap();
+        assert_eq!(index, 1);
         assert_eq!(wb.sheet_count(), 2);
         assert!(wb.get_sheet("NewSheet").is_some());
     }
@@ -702,7 +720,12 @@ mod tests {
     #[test]
     fn test_add_duplicate_sheet() {
         let mut wb = Workbook::new();
-        assert!(wb.add_sheet("Sheet1").is_err());
+        let result = wb.add_sheet("Sheet1");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            XlexError::SheetAlreadyExists { .. }
+        ));
     }
 
     #[test]
@@ -715,9 +738,25 @@ mod tests {
     }
 
     #[test]
+    fn test_remove_nonexistent_sheet() {
+        let mut wb = Workbook::with_sheets(&["Sheet1", "Sheet2"]);
+        let result = wb.remove_sheet("NonExistent");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            XlexError::SheetNotFound { .. }
+        ));
+    }
+
+    #[test]
     fn test_remove_last_sheet() {
         let mut wb = Workbook::new();
-        assert!(wb.remove_sheet("Sheet1").is_err());
+        let result = wb.remove_sheet("Sheet1");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            XlexError::CannotDeleteLastSheet
+        ));
     }
 
     #[test]
@@ -729,12 +768,94 @@ mod tests {
     }
 
     #[test]
+    fn test_rename_sheet_to_same_name() {
+        let mut wb = Workbook::new();
+        wb.rename_sheet("Sheet1", "Sheet1").unwrap(); // Should succeed
+        assert!(wb.get_sheet("Sheet1").is_some());
+    }
+
+    #[test]
+    fn test_rename_sheet_to_existing_name() {
+        let mut wb = Workbook::with_sheets(&["Sheet1", "Sheet2"]);
+        let result = wb.rename_sheet("Sheet1", "Sheet2");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            XlexError::SheetAlreadyExists { .. }
+        ));
+    }
+
+    #[test]
+    fn test_rename_nonexistent_sheet() {
+        let mut wb = Workbook::new();
+        let result = wb.rename_sheet("NonExistent", "NewName");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            XlexError::SheetNotFound { .. }
+        ));
+    }
+
+    #[test]
     fn test_validate_sheet_name() {
         assert!(Workbook::validate_sheet_name("Valid Name").is_ok());
+        assert!(Workbook::validate_sheet_name("Sheet1").is_ok());
+        assert!(Workbook::validate_sheet_name("a".repeat(31).as_str()).is_ok()); // Max length
+
+        // Invalid cases
         assert!(Workbook::validate_sheet_name("").is_err());
         assert!(Workbook::validate_sheet_name("a".repeat(32).as_str()).is_err());
         assert!(Workbook::validate_sheet_name("Invalid:Name").is_err());
+        assert!(Workbook::validate_sheet_name("Invalid\\Name").is_err());
+        assert!(Workbook::validate_sheet_name("Invalid/Name").is_err());
+        assert!(Workbook::validate_sheet_name("Invalid?Name").is_err());
+        assert!(Workbook::validate_sheet_name("Invalid*Name").is_err());
+        assert!(Workbook::validate_sheet_name("Invalid[Name").is_err());
+        assert!(Workbook::validate_sheet_name("Invalid]Name").is_err());
         assert!(Workbook::validate_sheet_name("'Name").is_err());
+        assert!(Workbook::validate_sheet_name("Name'").is_err());
+    }
+
+    #[test]
+    fn test_move_sheet() {
+        let mut wb = Workbook::with_sheets(&["A", "B", "C", "D"]);
+
+        // Move C (index 2) to index 0
+        wb.move_sheet("C", 0).unwrap();
+        assert_eq!(wb.sheet_names(), vec!["C", "A", "B", "D"]);
+
+        // Move C (now index 0) to index 3
+        wb.move_sheet("C", 3).unwrap();
+        assert_eq!(wb.sheet_names(), vec!["A", "B", "D", "C"]);
+    }
+
+    #[test]
+    fn test_move_sheet_same_position() {
+        let mut wb = Workbook::with_sheets(&["A", "B", "C"]);
+        wb.move_sheet("B", 1).unwrap(); // Same position
+        assert_eq!(wb.sheet_names(), vec!["A", "B", "C"]);
+    }
+
+    #[test]
+    fn test_move_sheet_invalid_position() {
+        let mut wb = Workbook::with_sheets(&["A", "B", "C"]);
+        let result = wb.move_sheet("A", 5);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            XlexError::SheetIndexOutOfBounds { .. }
+        ));
+    }
+
+    #[test]
+    fn test_move_nonexistent_sheet() {
+        let mut wb = Workbook::new();
+        let result = wb.move_sheet("NonExistent", 0);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            XlexError::SheetNotFound { .. }
+        ));
     }
 
     #[test]
@@ -754,6 +875,21 @@ mod tests {
     }
 
     #[test]
+    fn test_cell_operations_nonexistent_sheet() {
+        let mut wb = Workbook::new();
+        let cell_ref = CellRef::new(1, 1);
+
+        let result = wb.get_cell("NonExistent", &cell_ref);
+        assert!(result.is_err());
+
+        let result = wb.set_cell("NonExistent", cell_ref.clone(), CellValue::string("test"));
+        assert!(result.is_err());
+
+        let result = wb.clear_cell("NonExistent", &cell_ref);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_workbook_stats() {
         let mut wb = Workbook::new();
         wb.set_cell("Sheet1", CellRef::new(1, 1), CellValue::string("Hello"))
@@ -765,5 +901,443 @@ mod tests {
         assert_eq!(stats.sheet_count, 1);
         assert_eq!(stats.total_cells, 2);
         assert_eq!(stats.formula_count, 1);
+    }
+
+    #[test]
+    fn test_active_sheet() {
+        let mut wb = Workbook::with_sheets(&["A", "B", "C"]);
+
+        assert_eq!(wb.active_sheet_index(), 0);
+
+        wb.set_active_sheet(2).unwrap();
+        assert_eq!(wb.active_sheet_index(), 2);
+
+        wb.set_active_sheet_by_name("A").unwrap();
+        assert_eq!(wb.active_sheet_index(), 0);
+    }
+
+    #[test]
+    fn test_active_sheet_invalid_index() {
+        let mut wb = Workbook::new();
+        let result = wb.set_active_sheet(5);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            XlexError::SheetIndexOutOfBounds { .. }
+        ));
+    }
+
+    #[test]
+    fn test_active_sheet_nonexistent_name() {
+        let mut wb = Workbook::new();
+        let result = wb.set_active_sheet_by_name("NonExistent");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            XlexError::SheetNotFound { .. }
+        ));
+    }
+
+    #[test]
+    fn test_sheet_visibility() {
+        let mut wb = Workbook::new();
+
+        // Default is visible
+        assert_eq!(
+            wb.get_sheet_visibility("Sheet1").unwrap(),
+            SheetVisibility::Visible
+        );
+
+        wb.set_sheet_visibility("Sheet1", SheetVisibility::Hidden)
+            .unwrap();
+        assert_eq!(
+            wb.get_sheet_visibility("Sheet1").unwrap(),
+            SheetVisibility::Hidden
+        );
+
+        wb.set_sheet_visibility("Sheet1", SheetVisibility::VeryHidden)
+            .unwrap();
+        assert_eq!(
+            wb.get_sheet_visibility("Sheet1").unwrap(),
+            SheetVisibility::VeryHidden
+        );
+    }
+
+    #[test]
+    fn test_sheet_visibility_nonexistent() {
+        let mut wb = Workbook::new();
+
+        let result = wb.get_sheet_visibility("NonExistent");
+        assert!(result.is_err());
+
+        let result = wb.set_sheet_visibility("NonExistent", SheetVisibility::Hidden);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_sheet_by_index() {
+        let wb = Workbook::with_sheets(&["A", "B", "C"]);
+
+        assert!(wb.get_sheet_by_index(0).is_some());
+        assert_eq!(wb.get_sheet_by_index(0).unwrap().name(), "A");
+        assert_eq!(wb.get_sheet_by_index(1).unwrap().name(), "B");
+        assert_eq!(wb.get_sheet_by_index(2).unwrap().name(), "C");
+        assert!(wb.get_sheet_by_index(3).is_none());
+    }
+
+    #[test]
+    fn test_get_sheet_by_index_mut() {
+        let mut wb = Workbook::new();
+
+        if let Some(sheet) = wb.get_sheet_by_index_mut(0) {
+            sheet.set_cell(CellRef::new(1, 1), CellValue::string("test"));
+        }
+
+        let value = wb.get_cell("Sheet1", &CellRef::new(1, 1)).unwrap();
+        assert_eq!(value, CellValue::string("test"));
+
+        assert!(wb.get_sheet_by_index_mut(5).is_none());
+    }
+
+    #[test]
+    fn test_defined_names() {
+        let mut wb = Workbook::new();
+
+        assert!(wb.defined_names().is_empty());
+
+        let name1 = DefinedName::new("MyRange", "Sheet1!$A$1:$B$10");
+        wb.set_defined_name(name1);
+
+        assert_eq!(wb.defined_names().len(), 1);
+        assert!(wb.get_defined_name("MyRange").is_some());
+        assert!(wb.get_defined_name("NonExistent").is_none());
+
+        let name2 = DefinedName::new("MyRange", "Sheet1!$C$1:$D$10"); // Same name, update
+        wb.set_defined_name(name2);
+        assert_eq!(wb.defined_names().len(), 1);
+        assert_eq!(
+            wb.get_defined_name("MyRange").unwrap().reference,
+            "Sheet1!$C$1:$D$10"
+        );
+
+        assert!(wb.remove_defined_name("MyRange"));
+        assert!(wb.defined_names().is_empty());
+        assert!(!wb.remove_defined_name("NonExistent")); // Returns false for non-existent
+    }
+
+    #[test]
+    fn test_defined_name_with_sheet_scope() {
+        let name = DefinedName::with_sheet_scope("LocalName", "Sheet1!$A$1", 0);
+        assert_eq!(name.name, "LocalName");
+        assert_eq!(name.reference, "Sheet1!$A$1");
+        assert_eq!(name.local_sheet_id, Some(0));
+        assert!(!name.hidden);
+    }
+
+    #[test]
+    fn test_properties() {
+        let mut wb = Workbook::new();
+
+        assert!(wb.properties().title.is_none());
+
+        wb.properties_mut().title = Some("My Workbook".to_string());
+        wb.properties_mut().creator = Some("Test User".to_string());
+
+        assert_eq!(wb.properties().title, Some("My Workbook".to_string()));
+        assert_eq!(wb.properties().creator, Some("Test User".to_string()));
+    }
+
+    #[test]
+    fn test_shared_strings() {
+        let mut wb = Workbook::new();
+
+        assert!(wb.shared_strings().is_empty());
+
+        let idx1 = wb.add_shared_string("Hello");
+        assert_eq!(idx1, 0);
+
+        let idx2 = wb.add_shared_string("World");
+        assert_eq!(idx2, 1);
+
+        assert_eq!(wb.shared_strings().len(), 2);
+        assert_eq!(wb.shared_strings()[0], "Hello");
+        assert_eq!(wb.shared_strings()[1], "World");
+    }
+
+    #[test]
+    fn test_style_registry() {
+        let mut wb = Workbook::new();
+
+        assert!(wb.style_registry().is_empty());
+
+        let style = crate::style::Style::default();
+        let id = wb.style_registry_mut().add(style);
+
+        assert_eq!(id, 0);
+        assert_eq!(wb.style_registry().len(), 1);
+    }
+
+    #[test]
+    fn test_open_nonexistent_file() {
+        let result = Workbook::open("/nonexistent/path/file.xlsx");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            XlexError::FileNotFound { .. }
+        ));
+    }
+
+    #[test]
+    fn test_open_invalid_extension() {
+        // Create a temp file with wrong extension
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("test_invalid.txt");
+        std::fs::write(&file_path, "not xlsx").unwrap();
+
+        let result = Workbook::open(&file_path);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            XlexError::InvalidExtension { .. }
+        ));
+
+        std::fs::remove_file(file_path).ok();
+    }
+
+    #[test]
+    fn test_remove_sheet_adjusts_active_sheet() {
+        let mut wb = Workbook::with_sheets(&["A", "B", "C"]);
+        wb.set_active_sheet(2).unwrap(); // C is active
+
+        wb.remove_sheet("C").unwrap();
+        // Active sheet should be adjusted
+        assert!(wb.active_sheet_index() < wb.sheet_count());
+    }
+
+    #[test]
+    fn test_save_and_open_roundtrip() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("test_roundtrip.xlsx");
+
+        // Create workbook with content
+        {
+            let mut wb = Workbook::new();
+
+            // Add cells
+            let cell_ref = crate::cell::CellRef::parse("A1").unwrap();
+            wb.set_cell("Sheet1", cell_ref, CellValue::String("Hello".to_string()))
+                .unwrap();
+
+            let cell_ref = crate::cell::CellRef::parse("B1").unwrap();
+            wb.set_cell("Sheet1", cell_ref, CellValue::Number(42.5))
+                .unwrap();
+
+            let cell_ref = crate::cell::CellRef::parse("C1").unwrap();
+            wb.set_cell("Sheet1", cell_ref, CellValue::Boolean(true))
+                .unwrap();
+
+            // Save
+            wb.save_as(&file_path).unwrap();
+        }
+
+        // Reopen and verify
+        {
+            let wb = Workbook::open(&file_path).unwrap();
+
+            assert_eq!(wb.sheet_count(), 1);
+            assert_eq!(wb.sheet_names()[0], "Sheet1");
+
+            // Verify cells - note inline string behavior
+            let cell_ref = crate::cell::CellRef::parse("B1").unwrap();
+            let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+            assert_eq!(value, CellValue::Number(42.5));
+
+            let cell_ref = crate::cell::CellRef::parse("C1").unwrap();
+            let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+            assert_eq!(value, CellValue::Boolean(true));
+        }
+
+        // Cleanup
+        std::fs::remove_file(file_path).ok();
+    }
+
+    #[test]
+    fn test_save_with_multiple_sheets() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("test_multi_sheet.xlsx");
+
+        {
+            let mut wb = Workbook::with_sheets(&["Data", "Summary", "Config"]);
+
+            // Add content to each sheet
+            let cell_ref = crate::cell::CellRef::parse("A1").unwrap();
+            wb.set_cell(
+                "Data",
+                cell_ref,
+                CellValue::String("Data Sheet".to_string()),
+            )
+            .unwrap();
+
+            let cell_ref = crate::cell::CellRef::parse("A1").unwrap();
+            wb.set_cell("Summary", cell_ref, CellValue::Number(100.0))
+                .unwrap();
+
+            wb.save_as(&file_path).unwrap();
+        }
+
+        {
+            let wb = Workbook::open(&file_path).unwrap();
+
+            assert_eq!(wb.sheet_count(), 3);
+            let names = wb.sheet_names();
+            assert!(names.contains(&"Data"));
+            assert!(names.contains(&"Summary"));
+            assert!(names.contains(&"Config"));
+        }
+
+        std::fs::remove_file(file_path).ok();
+    }
+
+    #[test]
+    fn test_save_with_properties() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("test_properties.xlsx");
+
+        {
+            let mut wb = Workbook::new();
+
+            wb.properties_mut().title = Some("Test Title".to_string());
+            wb.properties_mut().creator = Some("Test Author".to_string());
+            wb.properties_mut().subject = Some("Test Subject".to_string());
+
+            wb.save_as(&file_path).unwrap();
+        }
+
+        {
+            let wb = Workbook::open(&file_path).unwrap();
+
+            assert_eq!(wb.properties().title, Some("Test Title".to_string()));
+            assert_eq!(wb.properties().creator, Some("Test Author".to_string()));
+            assert_eq!(wb.properties().subject, Some("Test Subject".to_string()));
+        }
+
+        std::fs::remove_file(file_path).ok();
+    }
+
+    #[test]
+    fn test_save_as_invalid_extension() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("test_invalid.xls");
+
+        let wb = Workbook::new();
+        let result = wb.save_as(&file_path);
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            XlexError::InvalidExtension { .. }
+        ));
+    }
+
+    #[test]
+    fn test_save_no_path() {
+        let wb = Workbook::new();
+        let result = wb.save();
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            XlexError::OperationFailed { .. }
+        ));
+    }
+
+    #[test]
+    fn test_from_reader() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("test_from_reader.xlsx");
+
+        // Create a file first
+        {
+            let mut wb = Workbook::new();
+            let cell_ref = crate::cell::CellRef::parse("A1").unwrap();
+            wb.set_cell("Sheet1", cell_ref, CellValue::Number(123.0))
+                .unwrap();
+            wb.save_as(&file_path).unwrap();
+        }
+
+        // Read using from_reader
+        {
+            let file = std::fs::File::open(&file_path).unwrap();
+            let reader = std::io::BufReader::new(file);
+            let wb = Workbook::from_reader(reader, None).unwrap();
+
+            assert_eq!(wb.sheet_count(), 1);
+            assert!(wb.path().is_none());
+
+            let cell_ref = crate::cell::CellRef::parse("A1").unwrap();
+            let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+            assert_eq!(value, CellValue::Number(123.0));
+        }
+
+        std::fs::remove_file(file_path).ok();
+    }
+
+    #[test]
+    fn test_clear_cell() {
+        let mut wb = Workbook::new();
+
+        let cell_ref = crate::cell::CellRef::parse("A1").unwrap();
+        wb.set_cell("Sheet1", cell_ref.clone(), CellValue::Number(42.0))
+            .unwrap();
+
+        assert_eq!(
+            wb.get_cell("Sheet1", &cell_ref).unwrap(),
+            CellValue::Number(42.0)
+        );
+
+        wb.clear_cell("Sheet1", &cell_ref).unwrap();
+
+        assert_eq!(wb.get_cell("Sheet1", &cell_ref).unwrap(), CellValue::Empty);
+    }
+
+    #[test]
+    fn test_clear_cell_nonexistent_sheet() {
+        let mut wb = Workbook::new();
+        let cell_ref = crate::cell::CellRef::parse("A1").unwrap();
+
+        let result = wb.clear_cell("NonExistent", &cell_ref);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            XlexError::SheetNotFound { .. }
+        ));
+    }
+
+    #[test]
+    fn test_hidden_sheet_roundtrip() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("test_hidden_sheet.xlsx");
+
+        {
+            let mut wb = Workbook::with_sheets(&["Visible", "Hidden"]);
+            wb.set_sheet_visibility("Hidden", crate::sheet::SheetVisibility::Hidden)
+                .unwrap();
+            wb.save_as(&file_path).unwrap();
+        }
+
+        {
+            let wb = Workbook::open(&file_path).unwrap();
+
+            assert_eq!(
+                wb.get_sheet_visibility("Visible").unwrap(),
+                crate::sheet::SheetVisibility::Visible
+            );
+            assert_eq!(
+                wb.get_sheet_visibility("Hidden").unwrap(),
+                crate::sheet::SheetVisibility::Hidden
+            );
+        }
+
+        std::fs::remove_file(file_path).ok();
     }
 }

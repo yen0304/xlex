@@ -681,6 +681,48 @@ mod tests {
     }
 
     #[test]
+    fn test_sheet_set_name() {
+        let mut sheet = make_sheet();
+        sheet.set_name("NewName");
+        assert_eq!(sheet.name(), "NewName");
+    }
+
+    #[test]
+    fn test_sheet_info() {
+        let info = SheetInfo::new("MySheet", 5, "rId5", 4);
+        assert_eq!(info.name, "MySheet");
+        assert_eq!(info.sheet_id, 5);
+        assert_eq!(info.rel_id, "rId5");
+        assert_eq!(info.index, 4);
+        assert_eq!(info.visibility, SheetVisibility::Visible);
+    }
+
+    #[test]
+    fn test_sheet_visibility_enum() {
+        assert!(SheetVisibility::Visible.is_visible());
+        assert!(!SheetVisibility::Visible.is_hidden());
+
+        assert!(!SheetVisibility::Hidden.is_visible());
+        assert!(SheetVisibility::Hidden.is_hidden());
+
+        assert!(!SheetVisibility::VeryHidden.is_visible());
+        assert!(SheetVisibility::VeryHidden.is_hidden());
+    }
+
+    #[test]
+    fn test_sheet_visibility_display() {
+        assert_eq!(format!("{}", SheetVisibility::Visible), "visible");
+        assert_eq!(format!("{}", SheetVisibility::Hidden), "hidden");
+        assert_eq!(format!("{}", SheetVisibility::VeryHidden), "veryHidden");
+    }
+
+    #[test]
+    fn test_sheet_visibility_default() {
+        let visibility = SheetVisibility::default();
+        assert_eq!(visibility, SheetVisibility::Visible);
+    }
+
+    #[test]
     fn test_sheet_set_cell() {
         let mut sheet = make_sheet();
         let cell_ref = CellRef::new(1, 1);
@@ -691,6 +733,36 @@ mod tests {
 
         let value = sheet.get_value(&cell_ref);
         assert_eq!(value, CellValue::String("Hello".to_string()));
+    }
+
+    #[test]
+    fn test_sheet_get_cell() {
+        let mut sheet = make_sheet();
+        let cell_ref = CellRef::new(2, 3);
+
+        // Cell doesn't exist yet
+        assert!(sheet.get_cell(&cell_ref).is_none());
+
+        sheet.set_cell(cell_ref.clone(), CellValue::number(42.0));
+
+        let cell = sheet.get_cell(&cell_ref).unwrap();
+        assert_eq!(cell.reference, cell_ref);
+        assert_eq!(cell.value, CellValue::number(42.0));
+    }
+
+    #[test]
+    fn test_sheet_get_cell_mut() {
+        let mut sheet = make_sheet();
+        let cell_ref = CellRef::new(1, 1);
+
+        sheet.set_cell(cell_ref.clone(), CellValue::string("original"));
+
+        if let Some(cell) = sheet.get_cell_mut(&cell_ref) {
+            cell.value = CellValue::string("modified");
+        }
+
+        let value = sheet.get_value(&cell_ref);
+        assert_eq!(value, CellValue::string("modified"));
     }
 
     #[test]
@@ -878,5 +950,299 @@ mod tests {
 
         // Verify column width shifted
         assert_eq!(sheet.get_column_width(3), Some(25.0));
+    }
+
+    #[test]
+    fn test_sheet_insert_rows_zero_count() {
+        let mut sheet = make_sheet();
+        sheet.set_cell(CellRef::new(1, 1), CellValue::string("A1"));
+
+        // Insert 0 rows should do nothing
+        sheet.insert_rows(1, 0);
+
+        assert_eq!(
+            sheet.get_value(&CellRef::new(1, 1)),
+            CellValue::string("A1")
+        );
+    }
+
+    #[test]
+    fn test_sheet_delete_rows_zero_count() {
+        let mut sheet = make_sheet();
+        sheet.set_cell(CellRef::new(1, 1), CellValue::string("A1"));
+
+        // Delete 0 rows should do nothing
+        sheet.delete_rows(1, 0);
+
+        assert_eq!(
+            sheet.get_value(&CellRef::new(1, 1)),
+            CellValue::string("A1")
+        );
+    }
+
+    #[test]
+    fn test_sheet_insert_columns_zero_count() {
+        let mut sheet = make_sheet();
+        sheet.set_cell(CellRef::new(1, 1), CellValue::string("A1"));
+
+        // Insert 0 columns should do nothing
+        sheet.insert_columns(1, 0);
+
+        assert_eq!(
+            sheet.get_value(&CellRef::new(1, 1)),
+            CellValue::string("A1")
+        );
+    }
+
+    #[test]
+    fn test_sheet_delete_columns_zero_count() {
+        let mut sheet = make_sheet();
+        sheet.set_cell(CellRef::new(1, 1), CellValue::string("A1"));
+
+        // Delete 0 columns should do nothing
+        sheet.delete_columns(1, 0);
+
+        assert_eq!(
+            sheet.get_value(&CellRef::new(1, 1)),
+            CellValue::string("A1")
+        );
+    }
+
+    #[test]
+    fn test_sheet_insert_multiple_rows() {
+        let mut sheet = make_sheet();
+        sheet.set_cell(CellRef::new(1, 1), CellValue::string("A1"));
+        sheet.set_cell(CellRef::new(1, 2), CellValue::string("A2"));
+
+        // Insert 3 rows at row 2
+        sheet.insert_rows(2, 3);
+
+        assert_eq!(
+            sheet.get_value(&CellRef::new(1, 1)),
+            CellValue::string("A1")
+        );
+        assert_eq!(sheet.get_value(&CellRef::new(1, 2)), CellValue::Empty);
+        assert_eq!(sheet.get_value(&CellRef::new(1, 3)), CellValue::Empty);
+        assert_eq!(sheet.get_value(&CellRef::new(1, 4)), CellValue::Empty);
+        assert_eq!(
+            sheet.get_value(&CellRef::new(1, 5)),
+            CellValue::string("A2")
+        );
+    }
+
+    #[test]
+    fn test_sheet_delete_multiple_rows() {
+        let mut sheet = make_sheet();
+        for i in 1..=5 {
+            sheet.set_cell(CellRef::new(1, i), CellValue::number(i as f64));
+        }
+
+        // Delete rows 2-4 (3 rows)
+        sheet.delete_rows(2, 3);
+
+        assert_eq!(sheet.get_value(&CellRef::new(1, 1)), CellValue::number(1.0));
+        assert_eq!(sheet.get_value(&CellRef::new(1, 2)), CellValue::number(5.0));
+        assert_eq!(sheet.cell_count(), 2);
+    }
+
+    #[test]
+    fn test_sheet_cells_iterator() {
+        let mut sheet = make_sheet();
+        sheet.set_cell(CellRef::new(1, 1), CellValue::string("A"));
+        sheet.set_cell(CellRef::new(2, 2), CellValue::string("B"));
+        sheet.set_cell(CellRef::new(3, 3), CellValue::string("C"));
+
+        let cells: Vec<_> = sheet.cells().collect();
+        assert_eq!(cells.len(), 3);
+    }
+
+    #[test]
+    fn test_sheet_dimensions() {
+        let mut sheet = make_sheet();
+
+        // Empty sheet
+        assert_eq!(sheet.dimensions(), (0, 0));
+
+        sheet.set_cell(CellRef::new(5, 10), CellValue::string("A"));
+        assert_eq!(sheet.dimensions(), (5, 10));
+
+        sheet.set_cell(CellRef::new(10, 5), CellValue::string("B"));
+        assert_eq!(sheet.dimensions(), (10, 10));
+    }
+
+    #[test]
+    fn test_sheet_set_cell_style() {
+        let mut sheet = make_sheet();
+        let cell_ref = CellRef::new(1, 1);
+
+        // Set style on non-existent cell creates empty cell with style
+        sheet.set_cell_style(&cell_ref, Some(5));
+        let cell = sheet.get_cell(&cell_ref).unwrap();
+        assert_eq!(cell.style_id, Some(5));
+        assert!(cell.value.is_empty());
+
+        // Set style on existing cell
+        sheet.set_cell(CellRef::new(2, 2), CellValue::string("test"));
+        sheet.set_cell_style(&CellRef::new(2, 2), Some(10));
+        let cell = sheet.get_cell(&CellRef::new(2, 2)).unwrap();
+        assert_eq!(cell.style_id, Some(10));
+        assert_eq!(cell.value, CellValue::string("test"));
+
+        // Remove style
+        sheet.set_cell_style(&CellRef::new(2, 2), None);
+        let cell = sheet.get_cell(&CellRef::new(2, 2)).unwrap();
+        assert_eq!(cell.style_id, None);
+    }
+
+    #[test]
+    fn test_sheet_set_cell_comment() {
+        let mut sheet = make_sheet();
+        let cell_ref = CellRef::new(1, 1);
+
+        // Set comment on non-existent cell creates empty cell with comment
+        sheet.set_cell_comment(&cell_ref, Some("A comment".to_string()));
+        let cell = sheet.get_cell(&cell_ref).unwrap();
+        assert_eq!(cell.comment, Some("A comment".to_string()));
+        assert!(cell.value.is_empty());
+
+        // Set comment on existing cell
+        sheet.set_cell(CellRef::new(2, 2), CellValue::string("test"));
+        sheet.set_cell_comment(&CellRef::new(2, 2), Some("Another comment".to_string()));
+        let cell = sheet.get_cell(&CellRef::new(2, 2)).unwrap();
+        assert_eq!(cell.comment, Some("Another comment".to_string()));
+
+        // Remove comment
+        sheet.set_cell_comment(&CellRef::new(2, 2), None);
+        let cell = sheet.get_cell(&CellRef::new(2, 2)).unwrap();
+        assert_eq!(cell.comment, None);
+    }
+
+    #[test]
+    fn test_sheet_set_cell_hyperlink() {
+        let mut sheet = make_sheet();
+        let cell_ref = CellRef::new(1, 1);
+
+        // Set hyperlink on non-existent cell creates empty cell with hyperlink
+        sheet.set_cell_hyperlink(&cell_ref, Some("https://example.com".to_string()));
+        let cell = sheet.get_cell(&cell_ref).unwrap();
+        assert_eq!(cell.hyperlink, Some("https://example.com".to_string()));
+        assert!(cell.value.is_empty());
+
+        // Set hyperlink on existing cell
+        sheet.set_cell(CellRef::new(2, 2), CellValue::string("Click"));
+        sheet.set_cell_hyperlink(&CellRef::new(2, 2), Some("https://test.com".to_string()));
+        let cell = sheet.get_cell(&CellRef::new(2, 2)).unwrap();
+        assert_eq!(cell.hyperlink, Some("https://test.com".to_string()));
+
+        // Remove hyperlink
+        sheet.set_cell_hyperlink(&CellRef::new(2, 2), None);
+        let cell = sheet.get_cell(&CellRef::new(2, 2)).unwrap();
+        assert_eq!(cell.hyperlink, None);
+    }
+
+    #[test]
+    fn test_sheet_merged_ranges() {
+        let mut sheet = make_sheet();
+
+        assert!(sheet.merged_ranges().is_empty());
+
+        let range1 = crate::range::Range::parse("A1:B2").unwrap();
+        let range2 = crate::range::Range::parse("C3:D4").unwrap();
+
+        sheet.add_merged_range(range1.clone());
+        sheet.add_merged_range(range2.clone());
+
+        assert_eq!(sheet.merged_ranges().len(), 2);
+
+        sheet.remove_merged_range(&range1);
+        assert_eq!(sheet.merged_ranges().len(), 1);
+        assert_eq!(sheet.merged_ranges()[0], range2);
+    }
+
+    #[test]
+    fn test_sheet_calculate_used_range() {
+        let mut sheet = make_sheet();
+
+        // Empty sheet has no used range
+        assert!(sheet.calculate_used_range().is_none());
+
+        sheet.set_cell(CellRef::new(2, 3), CellValue::string("A"));
+        sheet.set_cell(CellRef::new(5, 8), CellValue::string("B"));
+        sheet.set_cell(CellRef::new(1, 10), CellValue::string("C"));
+
+        let range = sheet.calculate_used_range().unwrap();
+        assert_eq!(range.start, CellRef::new(1, 3));
+        assert_eq!(range.end, CellRef::new(5, 10));
+    }
+
+    #[test]
+    fn test_sheet_delete_rows_with_merged_ranges() {
+        let mut sheet = make_sheet();
+
+        // Add a merged range
+        let range = crate::range::Range::parse("A2:B4").unwrap();
+        sheet.add_merged_range(range);
+
+        // Delete row 3 (inside the merged range)
+        sheet.delete_rows(3, 1);
+
+        // Merged range should be adjusted
+        let ranges = sheet.merged_ranges();
+        assert_eq!(ranges.len(), 1);
+        // The range should be adjusted
+    }
+
+    #[test]
+    fn test_sheet_insert_rows_with_merged_ranges() {
+        let mut sheet = make_sheet();
+
+        // Add a merged range starting at row 2
+        let range = crate::range::Range::parse("A2:B4").unwrap();
+        sheet.add_merged_range(range);
+
+        // Insert 2 rows at row 2
+        sheet.insert_rows(2, 2);
+
+        // Merged range should be shifted
+        let ranges = sheet.merged_ranges();
+        assert_eq!(ranges.len(), 1);
+        assert_eq!(ranges[0].start.row, 4);
+        assert_eq!(ranges[0].end.row, 6);
+    }
+
+    #[test]
+    fn test_sheet_delete_hidden_rows() {
+        let mut sheet = make_sheet();
+
+        sheet.set_row_hidden(2, true);
+        sheet.set_row_hidden(3, true);
+        sheet.set_row_hidden(5, true);
+
+        // Delete row 3
+        sheet.delete_rows(3, 1);
+
+        // Row 2 should still be hidden
+        assert!(sheet.is_row_hidden(2));
+        // Row 3 (was 5) should be hidden now
+        // Row 4 is now what was row 5
+        assert!(sheet.is_row_hidden(4));
+        // Old row 3 should be gone
+        assert!(!sheet.is_row_hidden(3));
+    }
+
+    #[test]
+    fn test_sheet_delete_columns_with_merged_ranges() {
+        let mut sheet = make_sheet();
+
+        // Add a merged range
+        let range = crate::range::Range::parse("B1:D3").unwrap();
+        sheet.add_merged_range(range);
+
+        // Delete column C (column 3)
+        sheet.delete_columns(3, 1);
+
+        // Merged range should be adjusted
+        let ranges = sheet.merged_ranges();
+        assert_eq!(ranges.len(), 1);
     }
 }

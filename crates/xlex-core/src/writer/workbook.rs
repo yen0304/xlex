@@ -528,6 +528,7 @@ fn escape_xml(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cell::CellError;
 
     #[test]
     fn test_escape_xml() {
@@ -551,5 +552,194 @@ mod tests {
         let (t, v) = writer.format_cell_value(&CellValue::Boolean(true));
         assert_eq!(t, Some("b"));
         assert_eq!(v, Some("1".to_string()));
+    }
+
+    #[test]
+    fn test_default_trait() {
+        let _writer = WorkbookWriter::default();
+    }
+
+    #[test]
+    fn test_escape_xml_single_quote() {
+        assert_eq!(escape_xml("it's"), "it&apos;s");
+    }
+
+    #[test]
+    fn test_escape_xml_combined() {
+        let input = r#"<tag attr="val's" & more>"#;
+        let expected = "&lt;tag attr=&quot;val&apos;s&quot; &amp; more&gt;";
+        assert_eq!(escape_xml(input), expected);
+    }
+
+    #[test]
+    fn test_escape_xml_empty() {
+        assert_eq!(escape_xml(""), "");
+    }
+
+    #[test]
+    fn test_escape_xml_no_special_chars() {
+        assert_eq!(escape_xml("Normal text 123"), "Normal text 123");
+    }
+
+    #[test]
+    fn test_format_cell_value_empty() {
+        let writer = WorkbookWriter::new();
+        let (t, v) = writer.format_cell_value(&CellValue::Empty);
+        assert!(t.is_none());
+        assert!(v.is_none());
+    }
+
+    #[test]
+    fn test_format_cell_value_string() {
+        let writer = WorkbookWriter::new();
+        let (t, v) = writer.format_cell_value(&CellValue::String("Hello".to_string()));
+        assert_eq!(t, Some("inlineStr"));
+        assert_eq!(v, Some("Hello".to_string()));
+    }
+
+    #[test]
+    fn test_format_cell_value_string_with_xml() {
+        let writer = WorkbookWriter::new();
+        let (t, v) = writer.format_cell_value(&CellValue::String("<test>".to_string()));
+        assert_eq!(t, Some("inlineStr"));
+        assert_eq!(v, Some("&lt;test&gt;".to_string()));
+    }
+
+    #[test]
+    fn test_format_cell_value_boolean_false() {
+        let writer = WorkbookWriter::new();
+        let (t, v) = writer.format_cell_value(&CellValue::Boolean(false));
+        assert_eq!(t, Some("b"));
+        assert_eq!(v, Some("0".to_string()));
+    }
+
+    #[test]
+    fn test_format_cell_value_number_decimal() {
+        let writer = WorkbookWriter::new();
+        let (t, v) = writer.format_cell_value(&CellValue::Number(3.14159));
+        assert!(t.is_none());
+        assert_eq!(v, Some("3.14159".to_string()));
+    }
+
+    #[test]
+    fn test_format_cell_value_number_integer() {
+        let writer = WorkbookWriter::new();
+        let (t, v) = writer.format_cell_value(&CellValue::Number(100.0));
+        assert!(t.is_none());
+        assert_eq!(v, Some("100".to_string()));
+    }
+
+    #[test]
+    fn test_format_cell_value_number_negative() {
+        let writer = WorkbookWriter::new();
+        let (t, v) = writer.format_cell_value(&CellValue::Number(-42.5));
+        assert!(t.is_none());
+        assert_eq!(v, Some("-42.5".to_string()));
+    }
+
+    #[test]
+    fn test_format_cell_value_number_large() {
+        let writer = WorkbookWriter::new();
+        let (t, v) = writer.format_cell_value(&CellValue::Number(1e16));
+        assert!(t.is_none());
+        assert!(v.is_some());
+    }
+
+    #[test]
+    fn test_format_cell_value_formula_with_cached() {
+        let writer = WorkbookWriter::new();
+        let value = CellValue::Formula {
+            formula: "SUM(A1:A10)".to_string(),
+            cached_result: Some(Box::new(CellValue::Number(100.0))),
+        };
+        let (t, v) = writer.format_cell_value(&value);
+        assert!(t.is_none());
+        assert_eq!(v, Some("100".to_string()));
+    }
+
+    #[test]
+    fn test_format_cell_value_formula_without_cached() {
+        let writer = WorkbookWriter::new();
+        let value = CellValue::Formula {
+            formula: "SUM(A1:A10)".to_string(),
+            cached_result: None,
+        };
+        let (t, v) = writer.format_cell_value(&value);
+        assert!(t.is_none());
+        assert!(v.is_none());
+    }
+
+    #[test]
+    fn test_format_cell_value_error() {
+        let writer = WorkbookWriter::new();
+        let (t, v) = writer.format_cell_value(&CellValue::Error(CellError::Value));
+        assert_eq!(t, Some("e"));
+        assert_eq!(v, Some("#VALUE!".to_string()));
+    }
+
+    #[test]
+    fn test_format_cell_value_error_div_zero() {
+        let writer = WorkbookWriter::new();
+        let (t, v) = writer.format_cell_value(&CellValue::Error(CellError::DivZero));
+        assert_eq!(t, Some("e"));
+        assert_eq!(v, Some("#DIV/0!".to_string()));
+    }
+
+    #[test]
+    fn test_format_cell_value_datetime() {
+        let writer = WorkbookWriter::new();
+        let (t, v) = writer.format_cell_value(&CellValue::DateTime(44927.5));
+        assert!(t.is_none());
+        assert_eq!(v, Some("44927.5".to_string()));
+    }
+
+    #[test]
+    fn test_format_cell_value_formula_cached_string() {
+        let writer = WorkbookWriter::new();
+        let value = CellValue::Formula {
+            formula: "CONCAT(A1,B1)".to_string(),
+            cached_result: Some(Box::new(CellValue::String("HelloWorld".to_string()))),
+        };
+        let (t, v) = writer.format_cell_value(&value);
+        // String type from cached result
+        assert!(t.is_none());
+        assert_eq!(v, Some("HelloWorld".to_string()));
+    }
+
+    #[test]
+    fn test_format_cell_value_formula_cached_boolean() {
+        let writer = WorkbookWriter::new();
+        let value = CellValue::Formula {
+            formula: "A1>B1".to_string(),
+            cached_result: Some(Box::new(CellValue::Boolean(true))),
+        };
+        let (t, v) = writer.format_cell_value(&value);
+        assert!(t.is_none());
+        assert_eq!(v, Some("1".to_string()));
+    }
+
+    #[test]
+    fn test_escape_xml_unicode() {
+        assert_eq!(escape_xml("Hello 世界"), "Hello 世界");
+        assert_eq!(escape_xml("🎉 Party"), "🎉 Party");
+    }
+
+    #[test]
+    fn test_escape_xml_multiple_ampersands() {
+        assert_eq!(escape_xml("A & B & C"), "A &amp; B &amp; C");
+    }
+
+    #[test]
+    fn test_escape_xml_nested_tags() {
+        let input = "<outer><inner/></outer>";
+        let expected = "&lt;outer&gt;&lt;inner/&gt;&lt;/outer&gt;";
+        assert_eq!(escape_xml(input), expected);
+    }
+
+    #[test]
+    fn test_workbook_writer_new() {
+        let writer = WorkbookWriter::new();
+        // Just ensure it can be created
+        let _ = writer;
     }
 }

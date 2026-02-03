@@ -405,6 +405,20 @@ mod tests {
         assert_eq!(ErrorCode::FileNotFound.as_str(), "XLEX_E001");
         assert_eq!(ErrorCode::ParseError.as_str(), "XLEX_E010");
         assert_eq!(ErrorCode::InvalidReference.as_str(), "XLEX_E020");
+        assert_eq!(ErrorCode::SheetNotFound.as_str(), "XLEX_E030");
+        assert_eq!(ErrorCode::CellNotFound.as_str(), "XLEX_E040");
+        assert_eq!(ErrorCode::StyleNotFound.as_str(), "XLEX_E050");
+        assert_eq!(ErrorCode::OperationFailed.as_str(), "XLEX_E060");
+        assert_eq!(ErrorCode::TemplateParseError.as_str(), "XLEX_E070");
+        assert_eq!(ErrorCode::ConfigError.as_str(), "XLEX_E080");
+        assert_eq!(ErrorCode::InternalError.as_str(), "XLEX_E090");
+        assert_eq!(ErrorCode::NotImplemented.as_str(), "XLEX_E099");
+    }
+
+    #[test]
+    fn test_error_code_display_trait() {
+        assert_eq!(format!("{}", ErrorCode::FileNotFound), "XLEX_E001");
+        assert_eq!(format!("{}", ErrorCode::IoError), "XLEX_E005");
     }
 
     #[test]
@@ -414,5 +428,542 @@ mod tests {
         };
         assert_eq!(err.code(), ErrorCode::FileNotFound);
         assert_eq!(err.exit_code(), 1);
+    }
+
+    #[test]
+    fn test_all_error_codes() {
+        // File errors
+        assert_eq!(
+            XlexError::FileNotFound {
+                path: PathBuf::from("test")
+            }
+            .code(),
+            ErrorCode::FileNotFound
+        );
+        assert_eq!(
+            XlexError::FileExists {
+                path: PathBuf::from("test")
+            }
+            .code(),
+            ErrorCode::FileExists
+        );
+        assert_eq!(
+            XlexError::PermissionDenied {
+                path: PathBuf::from("test")
+            }
+            .code(),
+            ErrorCode::PermissionDenied
+        );
+        assert_eq!(
+            XlexError::InvalidExtension {
+                path: PathBuf::from("test")
+            }
+            .code(),
+            ErrorCode::InvalidExtension
+        );
+        assert_eq!(
+            XlexError::IoError {
+                message: "test".to_string(),
+                source: None
+            }
+            .code(),
+            ErrorCode::IoError
+        );
+
+        // Parse errors
+        assert_eq!(
+            XlexError::ParseError {
+                message: "test".to_string(),
+                location: "test".to_string()
+            }
+            .code(),
+            ErrorCode::ParseError
+        );
+        assert_eq!(
+            XlexError::InvalidZipStructure {
+                message: "test".to_string()
+            }
+            .code(),
+            ErrorCode::InvalidZipStructure
+        );
+        assert_eq!(
+            XlexError::MissingRequiredEntry {
+                entry: "test".to_string()
+            }
+            .code(),
+            ErrorCode::MissingRequiredEntry
+        );
+        assert_eq!(
+            XlexError::InvalidXml {
+                message: "test".to_string()
+            }
+            .code(),
+            ErrorCode::InvalidXml
+        );
+        assert_eq!(
+            XlexError::EncodingError {
+                message: "test".to_string()
+            }
+            .code(),
+            ErrorCode::EncodingError
+        );
+
+        // Reference errors
+        assert_eq!(
+            XlexError::InvalidReference {
+                reference: "test".to_string()
+            }
+            .code(),
+            ErrorCode::InvalidReference
+        );
+        assert_eq!(
+            XlexError::InvalidRange {
+                range: "test".to_string()
+            }
+            .code(),
+            ErrorCode::InvalidRange
+        );
+        assert_eq!(
+            XlexError::ReferenceOutOfBounds {
+                reference: "test".to_string()
+            }
+            .code(),
+            ErrorCode::ReferenceOutOfBounds
+        );
+
+        // Sheet errors
+        assert_eq!(
+            XlexError::SheetNotFound {
+                name: "test".to_string()
+            }
+            .code(),
+            ErrorCode::SheetNotFound
+        );
+        assert_eq!(
+            XlexError::SheetAlreadyExists {
+                name: "test".to_string()
+            }
+            .code(),
+            ErrorCode::SheetAlreadyExists
+        );
+        assert_eq!(
+            XlexError::InvalidSheetName {
+                name: "test".to_string(),
+                reason: "test".to_string()
+            }
+            .code(),
+            ErrorCode::InvalidSheetName
+        );
+        assert_eq!(
+            XlexError::SheetIndexOutOfBounds { index: 0 }.code(),
+            ErrorCode::SheetIndexOutOfBounds
+        );
+        assert_eq!(
+            XlexError::CannotDeleteLastSheet.code(),
+            ErrorCode::CannotDeleteLastSheet
+        );
+
+        // Cell errors
+        assert_eq!(
+            XlexError::CellNotFound {
+                reference: "A1".to_string()
+            }
+            .code(),
+            ErrorCode::CellNotFound
+        );
+        assert_eq!(
+            XlexError::InvalidCellValue {
+                message: "test".to_string()
+            }
+            .code(),
+            ErrorCode::InvalidCellValue
+        );
+        assert_eq!(
+            XlexError::InvalidFormula {
+                formula: "test".to_string(),
+                reason: "test".to_string()
+            }
+            .code(),
+            ErrorCode::InvalidFormula
+        );
+        assert_eq!(
+            XlexError::CircularReference {
+                path: "A1->B1->A1".to_string()
+            }
+            .code(),
+            ErrorCode::CircularReference
+        );
+
+        // Style errors
+        assert_eq!(
+            XlexError::StyleNotFound { id: 0 }.code(),
+            ErrorCode::StyleNotFound
+        );
+        assert_eq!(
+            XlexError::InvalidStyle {
+                message: "test".to_string()
+            }
+            .code(),
+            ErrorCode::InvalidStyle
+        );
+
+        // Operation errors
+        assert_eq!(
+            XlexError::OperationFailed {
+                message: "test".to_string()
+            }
+            .code(),
+            ErrorCode::OperationFailed
+        );
+        assert_eq!(
+            XlexError::InvalidOperation {
+                message: "test".to_string()
+            }
+            .code(),
+            ErrorCode::InvalidOperation
+        );
+        assert_eq!(
+            XlexError::UnsupportedOperation {
+                message: "test".to_string()
+            }
+            .code(),
+            ErrorCode::UnsupportedOperation
+        );
+
+        // Template errors
+        assert_eq!(
+            XlexError::TemplateParseError {
+                message: "test".to_string()
+            }
+            .code(),
+            ErrorCode::TemplateParseError
+        );
+        assert_eq!(
+            XlexError::TemplateRenderError {
+                message: "test".to_string()
+            }
+            .code(),
+            ErrorCode::TemplateRenderError
+        );
+        assert_eq!(
+            XlexError::InvalidTemplateData {
+                message: "test".to_string()
+            }
+            .code(),
+            ErrorCode::InvalidTemplateData
+        );
+
+        // Config errors
+        assert_eq!(
+            XlexError::ConfigError {
+                message: "test".to_string()
+            }
+            .code(),
+            ErrorCode::ConfigError
+        );
+        assert_eq!(
+            XlexError::InvalidConfig {
+                message: "test".to_string()
+            }
+            .code(),
+            ErrorCode::InvalidConfig
+        );
+
+        // General errors
+        assert_eq!(
+            XlexError::InternalError {
+                message: "test".to_string()
+            }
+            .code(),
+            ErrorCode::InternalError
+        );
+        assert_eq!(
+            XlexError::NotImplemented {
+                feature: "test".to_string()
+            }
+            .code(),
+            ErrorCode::NotImplemented
+        );
+    }
+
+    #[test]
+    fn test_recovery_suggestions() {
+        // Test that all errors have proper suggestions
+        assert!(XlexError::FileNotFound {
+            path: PathBuf::from("test")
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::FileExists {
+            path: PathBuf::from("test")
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::PermissionDenied {
+            path: PathBuf::from("test")
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::InvalidExtension {
+            path: PathBuf::from("test")
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::IoError {
+            message: "test".to_string(),
+            source: None
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::ParseError {
+            message: "test".to_string(),
+            location: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::InvalidZipStructure {
+            message: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::MissingRequiredEntry {
+            entry: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::InvalidXml {
+            message: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::InvalidReference {
+            reference: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::InvalidRange {
+            range: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::ReferenceOutOfBounds {
+            reference: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::SheetNotFound {
+            name: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::SheetAlreadyExists {
+            name: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::InvalidSheetName {
+            name: "test".to_string(),
+            reason: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::SheetIndexOutOfBounds { index: 0 }
+            .recovery_suggestion()
+            .is_some());
+        assert!(XlexError::CannotDeleteLastSheet
+            .recovery_suggestion()
+            .is_some());
+        assert!(XlexError::CellNotFound {
+            reference: "A1".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::InvalidCellValue {
+            message: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::InvalidFormula {
+            formula: "test".to_string(),
+            reason: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::CircularReference {
+            path: "A1->B1".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::StyleNotFound { id: 0 }
+            .recovery_suggestion()
+            .is_some());
+        assert!(XlexError::InvalidStyle {
+            message: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::TemplateParseError {
+            message: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::TemplateRenderError {
+            message: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::InvalidTemplateData {
+            message: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::ConfigError {
+            message: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::InvalidConfig {
+            message: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::OperationFailed {
+            message: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::InvalidOperation {
+            message: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::UnsupportedOperation {
+            message: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::InternalError {
+            message: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+        assert!(XlexError::NotImplemented {
+            feature: "test".to_string()
+        }
+        .recovery_suggestion()
+        .is_some());
+    }
+
+    #[test]
+    fn test_error_display_messages() {
+        // Verify error messages contain the error code and relevant info
+        let err = XlexError::FileNotFound {
+            path: PathBuf::from("test.xlsx"),
+        };
+        let msg = format!("{}", err);
+        assert!(msg.contains("XLEX_E001"));
+        assert!(msg.contains("test.xlsx"));
+
+        let err = XlexError::SheetNotFound {
+            name: "MySheet".to_string(),
+        };
+        let msg = format!("{}", err);
+        assert!(msg.contains("XLEX_E030"));
+        assert!(msg.contains("MySheet"));
+
+        let err = XlexError::InvalidFormula {
+            formula: "=SUM(A1".to_string(),
+            reason: "missing closing parenthesis".to_string(),
+        };
+        let msg = format!("{}", err);
+        assert!(msg.contains("XLEX_E042"));
+        assert!(msg.contains("=SUM(A1"));
+        assert!(msg.contains("missing closing parenthesis"));
+    }
+
+    #[test]
+    fn test_from_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let xlex_err: XlexError = io_err.into();
+        assert_eq!(xlex_err.code(), ErrorCode::IoError);
+        let msg = format!("{}", xlex_err);
+        assert!(msg.contains("file not found"));
+    }
+
+    #[test]
+    fn test_exit_codes() {
+        // Verify exit codes match error code values
+        assert_eq!(
+            XlexError::FileNotFound {
+                path: PathBuf::from("test")
+            }
+            .exit_code(),
+            1
+        );
+        assert_eq!(
+            XlexError::ParseError {
+                message: "test".to_string(),
+                location: "test".to_string()
+            }
+            .exit_code(),
+            10
+        );
+        assert_eq!(
+            XlexError::InvalidReference {
+                reference: "test".to_string()
+            }
+            .exit_code(),
+            20
+        );
+        assert_eq!(
+            XlexError::SheetNotFound {
+                name: "test".to_string()
+            }
+            .exit_code(),
+            30
+        );
+        assert_eq!(
+            XlexError::CellNotFound {
+                reference: "test".to_string()
+            }
+            .exit_code(),
+            40
+        );
+        assert_eq!(XlexError::StyleNotFound { id: 0 }.exit_code(), 50);
+        assert_eq!(
+            XlexError::OperationFailed {
+                message: "test".to_string()
+            }
+            .exit_code(),
+            60
+        );
+        assert_eq!(
+            XlexError::TemplateParseError {
+                message: "test".to_string()
+            }
+            .exit_code(),
+            70
+        );
+        assert_eq!(
+            XlexError::ConfigError {
+                message: "test".to_string()
+            }
+            .exit_code(),
+            80
+        );
+        assert_eq!(
+            XlexError::InternalError {
+                message: "test".to_string()
+            }
+            .exit_code(),
+            90
+        );
+        assert_eq!(
+            XlexError::NotImplemented {
+                feature: "test".to_string()
+            }
+            .exit_code(),
+            99
+        );
     }
 }

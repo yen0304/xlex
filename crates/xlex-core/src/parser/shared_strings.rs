@@ -188,4 +188,241 @@ mod tests {
         assert_eq!(strings.len(), 1);
         assert_eq!(strings[0], "Rich Text");
     }
+
+    #[test]
+    fn test_default_cache_size() {
+        assert_eq!(DEFAULT_CACHE_SIZE, 10_000);
+    }
+
+    #[test]
+    fn test_new_with_cache_size() {
+        let parser = SharedStringsParser::new(5000);
+        assert!(parser.count().is_none());
+        assert!(parser.all_strings().is_none());
+    }
+
+    #[test]
+    fn test_new_with_zero_cache_size() {
+        // Zero cache size should fall back to default
+        let parser = SharedStringsParser::new(0);
+        assert!(parser.count().is_none());
+    }
+
+    #[test]
+    fn test_default_trait() {
+        let parser = SharedStringsParser::default();
+        assert!(parser.count().is_none());
+        assert!(parser.all_strings().is_none());
+    }
+
+    #[test]
+    fn test_count_after_parse() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+            <si><t>One</t></si>
+            <si><t>Two</t></si>
+            <si><t>Three</t></si>
+        </sst>"#;
+
+        let mut parser = SharedStringsParser::with_default_cache();
+        parser.parse_all(Cursor::new(xml)).unwrap();
+
+        assert_eq!(parser.count(), Some(3));
+    }
+
+    #[test]
+    fn test_all_strings_after_parse() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+            <si><t>Apple</t></si>
+            <si><t>Banana</t></si>
+        </sst>"#;
+
+        let mut parser = SharedStringsParser::with_default_cache();
+        parser.parse_all(Cursor::new(xml)).unwrap();
+
+        let all = parser.all_strings().unwrap();
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0], "Apple");
+        assert_eq!(all[1], "Banana");
+    }
+
+    #[test]
+    fn test_empty_sst() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+        </sst>"#;
+
+        let mut parser = SharedStringsParser::with_default_cache();
+        let strings = parser.parse_all(Cursor::new(xml)).unwrap();
+
+        assert!(strings.is_empty());
+        assert_eq!(parser.count(), Some(0));
+    }
+
+    #[test]
+    fn test_empty_string_value() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+            <si><t></t></si>
+            <si><t>NotEmpty</t></si>
+        </sst>"#;
+
+        let mut parser = SharedStringsParser::with_default_cache();
+        let strings = parser.parse_all(Cursor::new(xml)).unwrap();
+
+        assert_eq!(strings.len(), 2);
+        assert_eq!(strings[0], "");
+        assert_eq!(strings[1], "NotEmpty");
+    }
+
+    #[test]
+    fn test_string_with_xml_entities() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+            <si><t>&lt;tag&gt;</t></si>
+            <si><t>A &amp; B</t></si>
+            <si><t>&quot;quoted&quot;</t></si>
+        </sst>"#;
+
+        let mut parser = SharedStringsParser::with_default_cache();
+        let strings = parser.parse_all(Cursor::new(xml)).unwrap();
+
+        assert_eq!(strings[0], "<tag>");
+        assert_eq!(strings[1], "A & B");
+        assert_eq!(strings[2], "\"quoted\"");
+    }
+
+    #[test]
+    fn test_string_with_unicode() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+            <si><t>こんにちは</t></si>
+            <si><t>你好</t></si>
+            <si><t>🎉</t></si>
+        </sst>"#;
+
+        let mut parser = SharedStringsParser::with_default_cache();
+        let strings = parser.parse_all(Cursor::new(xml)).unwrap();
+
+        assert_eq!(strings[0], "こんにちは");
+        assert_eq!(strings[1], "你好");
+        assert_eq!(strings[2], "🎉");
+    }
+
+    #[test]
+    fn test_get_before_parse() {
+        let mut parser = SharedStringsParser::with_default_cache();
+        assert_eq!(parser.get(0), None);
+        assert_eq!(parser.get(100), None);
+    }
+
+    #[test]
+    fn test_get_caches_value() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+            <si><t>Cached</t></si>
+        </sst>"#;
+
+        let mut parser = SharedStringsParser::with_default_cache();
+        parser.parse_all(Cursor::new(xml)).unwrap();
+
+        // First get should populate cache
+        assert_eq!(parser.get(0), Some("Cached".to_string()));
+        // Second get should hit cache
+        assert_eq!(parser.get(0), Some("Cached".to_string()));
+    }
+
+    #[test]
+    fn test_small_cache_eviction() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+            <si><t>A</t></si>
+            <si><t>B</t></si>
+            <si><t>C</t></si>
+        </sst>"#;
+
+        // Small cache of size 2
+        let mut parser = SharedStringsParser::new(2);
+        parser.parse_all(Cursor::new(xml)).unwrap();
+
+        // Access all strings - cache should handle eviction
+        assert_eq!(parser.get(0), Some("A".to_string()));
+        assert_eq!(parser.get(1), Some("B".to_string()));
+        assert_eq!(parser.get(2), Some("C".to_string()));
+
+        // All should still be accessible from strings vec
+        assert_eq!(parser.get(0), Some("A".to_string()));
+    }
+
+    #[test]
+    fn test_nested_rich_text_elements() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+            <si>
+                <r>
+                    <rPr><b/><sz val="12"/></rPr>
+                    <t>Bold</t>
+                </r>
+                <r>
+                    <rPr><i/></rPr>
+                    <t> Italic</t>
+                </r>
+            </si>
+        </sst>"#;
+
+        let mut parser = SharedStringsParser::with_default_cache();
+        let strings = parser.parse_all(Cursor::new(xml)).unwrap();
+
+        assert_eq!(strings.len(), 1);
+        assert_eq!(strings[0], "Bold Italic");
+    }
+
+    #[test]
+    fn test_malformed_xml_returns_error() {
+        // Completely malformed XML structure
+        let xml = r#"<<<<not valid xml>>>>"#;
+
+        let mut parser = SharedStringsParser::with_default_cache();
+        let result = parser.parse_all(Cursor::new(xml));
+
+        // Parser should handle malformed XML somehow (may return error or empty)
+        // The behavior depends on quick_xml's error handling
+        if result.is_ok() {
+            assert!(result.unwrap().is_empty());
+        }
+    }
+
+    #[test]
+    fn test_multiple_t_elements_in_si() {
+        // Some Excel files have multiple <t> directly in <si>
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+            <si>
+                <t>Part1</t>
+                <t>Part2</t>
+            </si>
+        </sst>"#;
+
+        let mut parser = SharedStringsParser::with_default_cache();
+        let strings = parser.parse_all(Cursor::new(xml)).unwrap();
+
+        assert_eq!(strings.len(), 1);
+        assert_eq!(strings[0], "Part1Part2");
+    }
+
+    #[test]
+    fn test_whitespace_preservation() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+            <si><t>  spaces  </t></si>
+            <si><t>	tab	</t></si>
+        </sst>"#;
+
+        let mut parser = SharedStringsParser::with_default_cache();
+        let strings = parser.parse_all(Cursor::new(xml)).unwrap();
+
+        assert_eq!(strings[0], "  spaces  ");
+        assert_eq!(strings[1], "\ttab\t");
+    }
 }

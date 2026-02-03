@@ -348,6 +348,13 @@ mod tests {
     fn test_cell_ref_parse_case_insensitive() {
         assert_eq!(CellRef::parse("a1").unwrap(), CellRef::new(1, 1));
         assert_eq!(CellRef::parse("Ab10").unwrap(), CellRef::new(28, 10));
+        assert_eq!(CellRef::parse("aA1").unwrap(), CellRef::new(27, 1));
+    }
+
+    #[test]
+    fn test_cell_ref_parse_with_whitespace() {
+        assert_eq!(CellRef::parse("  A1  ").unwrap(), CellRef::new(1, 1));
+        assert_eq!(CellRef::parse("\tB2\n").unwrap(), CellRef::new(2, 2));
     }
 
     #[test]
@@ -359,6 +366,10 @@ mod tests {
         assert!(CellRef::parse("1").is_err());
         assert!(CellRef::parse("XFE1").is_err()); // Column too large
         assert!(CellRef::parse("A1048577").is_err()); // Row too large
+        assert!(CellRef::parse("A-1").is_err()); // Negative row
+        assert!(CellRef::parse("A1B").is_err()); // Invalid format
+        assert!(CellRef::parse("123").is_err()); // Only numbers
+        assert!(CellRef::parse("ABC").is_err()); // Only letters
     }
 
     #[test]
@@ -367,6 +378,27 @@ mod tests {
         assert_eq!(CellRef::new(26, 26).to_a1(), "Z26");
         assert_eq!(CellRef::new(27, 1).to_a1(), "AA1");
         assert_eq!(CellRef::new(16384, 1048576).to_a1(), "XFD1048576");
+    }
+
+    #[test]
+    fn test_cell_ref_display() {
+        let cell = CellRef::new(1, 1);
+        assert_eq!(format!("{}", cell), "A1");
+
+        let cell = CellRef::new(27, 100);
+        assert_eq!(format!("{}", cell), "AA100");
+    }
+
+    #[test]
+    fn test_cell_ref_from_str() {
+        let cell: CellRef = "A1".parse().unwrap();
+        assert_eq!(cell, CellRef::new(1, 1));
+
+        let cell: CellRef = "ZZ99".parse().unwrap();
+        assert_eq!(cell, CellRef::new(702, 99));
+
+        // Invalid should fail
+        assert!("invalid".parse::<CellRef>().is_err());
     }
 
     #[test]
@@ -381,12 +413,33 @@ mod tests {
     }
 
     #[test]
+    fn test_col_to_letters_boundary() {
+        // Test boundary values
+        assert_eq!(CellRef::col_to_letters(0), ""); // 0 should return empty
+        assert_eq!(CellRef::col_to_letters(1), "A");
+        assert_eq!(CellRef::col_to_letters(CellRef::MAX_COL), "XFD");
+    }
+
+    #[test]
+    fn test_cell_ref_col_from_letters_pub() {
+        assert_eq!(CellRef::col_from_letters_pub("A"), Some(1));
+        assert_eq!(CellRef::col_from_letters_pub("Z"), Some(26));
+        assert_eq!(CellRef::col_from_letters_pub("AA"), Some(27));
+        assert_eq!(CellRef::col_from_letters_pub("XFD"), Some(16384));
+        assert_eq!(CellRef::col_from_letters_pub("XFE"), None); // Too large
+        assert_eq!(CellRef::col_from_letters_pub(""), None); // Empty
+        assert_eq!(CellRef::col_from_letters_pub("A1"), None); // Contains digit
+    }
+
+    #[test]
     fn test_cell_value_type_name() {
         assert_eq!(CellValue::Empty.type_name(), "empty");
         assert_eq!(CellValue::string("test").type_name(), "string");
         assert_eq!(CellValue::number(42.0).type_name(), "number");
         assert_eq!(CellValue::boolean(true).type_name(), "boolean");
         assert_eq!(CellValue::formula("A1+B1").type_name(), "formula");
+        assert_eq!(CellValue::Error(CellError::Value).type_name(), "error");
+        assert_eq!(CellValue::DateTime(44562.0).type_name(), "datetime");
     }
 
     #[test]
@@ -398,6 +451,63 @@ mod tests {
         assert_eq!(CellValue::boolean(true).to_display_string(), "TRUE");
         assert_eq!(CellValue::boolean(false).to_display_string(), "FALSE");
         assert_eq!(CellValue::formula("A1+B1").to_display_string(), "=A1+B1");
+        assert_eq!(
+            CellValue::Error(CellError::Value).to_display_string(),
+            "#VALUE!"
+        );
+        assert_eq!(CellValue::DateTime(44562.0).to_display_string(), "44562");
+    }
+
+    #[test]
+    fn test_cell_value_number_display() {
+        // Integer-like floats should display without decimals
+        assert_eq!(CellValue::number(100.0).to_display_string(), "100");
+        assert_eq!(CellValue::number(-50.0).to_display_string(), "-50");
+        assert_eq!(CellValue::number(0.0).to_display_string(), "0");
+
+        // Decimals should be preserved
+        assert_eq!(CellValue::number(3.14159).to_display_string(), "3.14159");
+        assert_eq!(CellValue::number(0.001).to_display_string(), "0.001");
+
+        // Very large numbers
+        assert_eq!(
+            CellValue::number(1e15).to_display_string(),
+            "1000000000000000"
+        );
+        // Numbers beyond 1e15 use scientific notation
+        let large_display = CellValue::number(1e16).to_display_string();
+        assert!(large_display.contains("e") || large_display.len() > 15);
+    }
+
+    #[test]
+    fn test_cell_value_is_empty() {
+        assert!(CellValue::Empty.is_empty());
+        assert!(!CellValue::string("").is_empty()); // Empty string is not Empty variant
+        assert!(!CellValue::number(0.0).is_empty());
+        assert!(!CellValue::boolean(false).is_empty());
+    }
+
+    #[test]
+    fn test_cell_value_constructors() {
+        let s = CellValue::string("test");
+        assert!(matches!(s, CellValue::String(ref v) if v == "test"));
+
+        let n = CellValue::number(42.5);
+        assert!(matches!(n, CellValue::Number(v) if (v - 42.5).abs() < f64::EPSILON));
+
+        let b = CellValue::boolean(true);
+        assert!(matches!(b, CellValue::Boolean(true)));
+
+        let f = CellValue::formula("SUM(A1:B10)");
+        assert!(matches!(f, CellValue::Formula { ref formula, .. } if formula == "SUM(A1:B10)"));
+    }
+
+    #[test]
+    fn test_cell_value_display_trait() {
+        assert_eq!(format!("{}", CellValue::Empty), "");
+        assert_eq!(format!("{}", CellValue::string("test")), "test");
+        assert_eq!(format!("{}", CellValue::number(42.0)), "42");
+        assert_eq!(format!("{}", CellValue::boolean(true)), "TRUE");
     }
 
     #[test]
@@ -406,6 +516,129 @@ mod tests {
         assert_eq!(CellError::parse("#REF!"), Some(CellError::Ref));
         assert_eq!(CellError::parse("#DIV/0!"), Some(CellError::DivZero));
         assert_eq!(CellError::parse("#N/A"), Some(CellError::Na));
+        assert_eq!(CellError::parse("#NULL!"), Some(CellError::Null));
+        assert_eq!(CellError::parse("#NAME?"), Some(CellError::Name));
+        assert_eq!(CellError::parse("#NUM!"), Some(CellError::Num));
+        assert_eq!(
+            CellError::parse("#GETTING_DATA"),
+            Some(CellError::GettingData)
+        );
         assert_eq!(CellError::parse("invalid"), None);
+        assert_eq!(CellError::parse(""), None);
+    }
+
+    #[test]
+    fn test_cell_error_parse_case_insensitive() {
+        assert_eq!(CellError::parse("#value!"), Some(CellError::Value));
+        assert_eq!(CellError::parse("#Value!"), Some(CellError::Value));
+        assert_eq!(CellError::parse("#n/a"), Some(CellError::Na));
+    }
+
+    #[test]
+    fn test_cell_error_display() {
+        assert_eq!(format!("{}", CellError::Null), "#NULL!");
+        assert_eq!(format!("{}", CellError::DivZero), "#DIV/0!");
+        assert_eq!(format!("{}", CellError::Value), "#VALUE!");
+        assert_eq!(format!("{}", CellError::Ref), "#REF!");
+        assert_eq!(format!("{}", CellError::Name), "#NAME?");
+        assert_eq!(format!("{}", CellError::Num), "#NUM!");
+        assert_eq!(format!("{}", CellError::Na), "#N/A");
+        assert_eq!(format!("{}", CellError::GettingData), "#GETTING_DATA");
+    }
+
+    #[test]
+    fn test_cell_creation() {
+        let cell_ref = CellRef::new(1, 1);
+        let cell = Cell::new(cell_ref.clone(), CellValue::string("test"));
+
+        assert_eq!(cell.reference, cell_ref);
+        assert_eq!(cell.value, CellValue::string("test"));
+        assert!(cell.style_id.is_none());
+        assert!(cell.comment.is_none());
+        assert!(cell.hyperlink.is_none());
+    }
+
+    #[test]
+    fn test_cell_empty() {
+        let cell_ref = CellRef::new(2, 3);
+        let cell = Cell::empty(cell_ref.clone());
+
+        assert_eq!(cell.reference, cell_ref);
+        assert!(cell.value.is_empty());
+    }
+
+    #[test]
+    fn test_cell_with_style() {
+        let cell = Cell::new(CellRef::new(1, 1), CellValue::string("styled")).with_style(5);
+
+        assert_eq!(cell.style_id, Some(5));
+    }
+
+    #[test]
+    fn test_cell_with_comment() {
+        let cell = Cell::new(CellRef::new(1, 1), CellValue::string("commented"))
+            .with_comment("This is a comment");
+
+        assert_eq!(cell.comment, Some("This is a comment".to_string()));
+    }
+
+    #[test]
+    fn test_cell_with_hyperlink() {
+        let cell = Cell::new(CellRef::new(1, 1), CellValue::string("Click here"))
+            .with_hyperlink("https://example.com");
+
+        assert_eq!(cell.hyperlink, Some("https://example.com".to_string()));
+    }
+
+    #[test]
+    fn test_cell_builder_chain() {
+        let cell = Cell::new(CellRef::new(1, 1), CellValue::string("test"))
+            .with_style(1)
+            .with_comment("comment")
+            .with_hyperlink("https://example.com");
+
+        assert_eq!(cell.style_id, Some(1));
+        assert_eq!(cell.comment, Some("comment".to_string()));
+        assert_eq!(cell.hyperlink, Some("https://example.com".to_string()));
+    }
+
+    #[test]
+    fn test_cell_value_formula_cached_result() {
+        let formula = CellValue::Formula {
+            formula: "A1+B1".to_string(),
+            cached_result: Some(Box::new(CellValue::number(42.0))),
+        };
+
+        assert_eq!(formula.type_name(), "formula");
+        assert_eq!(formula.to_display_string(), "=A1+B1");
+    }
+
+    #[test]
+    fn test_cell_ref_constants() {
+        assert_eq!(CellRef::MAX_COL, 16384);
+        assert_eq!(CellRef::MAX_ROW, 1048576);
+    }
+
+    #[test]
+    fn test_cell_value_default() {
+        let value = CellValue::default();
+        assert!(matches!(value, CellValue::Empty));
+    }
+
+    #[test]
+    fn test_cell_ref_equality_and_hash() {
+        use std::collections::HashSet;
+
+        let ref1 = CellRef::new(1, 1);
+        let ref2 = CellRef::new(1, 1);
+        let ref3 = CellRef::new(2, 1);
+
+        assert_eq!(ref1, ref2);
+        assert_ne!(ref1, ref3);
+
+        let mut set = HashSet::new();
+        set.insert(ref1.clone());
+        assert!(set.contains(&ref2));
+        assert!(!set.contains(&ref3));
     }
 }
