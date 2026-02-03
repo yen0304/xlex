@@ -143,6 +143,13 @@ impl Sheet {
         self.used_range = None; // Invalidate cache
     }
 
+    /// Inserts a complete cell object, preserving all its properties (style_id, comment, hyperlink).
+    pub fn insert_cell(&mut self, cell: Cell) {
+        self.cells
+            .insert((cell.reference.col, cell.reference.row), cell);
+        self.used_range = None; // Invalidate cache
+    }
+
     /// Sets a cell's style ID.
     pub fn set_cell_style(&mut self, cell_ref: &CellRef, style_id: Option<u32>) {
         if let Some(cell) = self.cells.get_mut(&(cell_ref.col, cell_ref.row)) {

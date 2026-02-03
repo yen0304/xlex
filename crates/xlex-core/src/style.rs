@@ -100,6 +100,14 @@ impl Color {
             _ => None,
         }
     }
+
+    /// Returns the ARGB hex string for OOXML (FF prefix for full opacity).
+    pub fn to_argb_hex(&self) -> Option<String> {
+        match self {
+            Self::Rgb(val) => Some(format!("FF{:06X}", val)),
+            _ => None,
+        }
+    }
 }
 
 /// Font style.
@@ -321,6 +329,14 @@ impl StyleRegistry {
         self.styles.insert(id, style);
         self.next_id += 1;
         id
+    }
+
+    /// Adds a style with a specific ID (used when loading from file).
+    pub fn add_with_id(&mut self, id: u32, style: Style) {
+        self.styles.insert(id, style);
+        if id >= self.next_id {
+            self.next_id = id + 1;
+        }
     }
 
     /// Returns the number of styles.

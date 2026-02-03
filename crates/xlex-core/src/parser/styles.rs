@@ -6,7 +6,22 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 
 use crate::error::{XlexError, XlexResult};
-use crate::style::{Border, BorderStyle, Fill, FillPattern, Font, StyleRegistry};
+use crate::style::{
+    Border, BorderSide, BorderStyle, Color, Fill, FillPattern, Font, HorizontalAlignment,
+    NumberFormat, Style, StyleRegistry, VerticalAlignment,
+};
+
+/// Tuple type for cellXfs entry data during parsing.
+/// (fontId, fillId, borderId, numFmtId, hAlign, vAlign, wrapText)
+type CellXfEntry = (
+    usize,
+    usize,
+    usize,
+    u32,
+    Option<HorizontalAlignment>,
+    Option<VerticalAlignment>,
+    bool,
+);
 
 /// Parser for styles.xml.
 pub struct StylesParser;
@@ -35,6 +50,11 @@ impl StylesParser {
         let mut current_font: Option<Font> = None;
         let mut current_fill: Option<Fill> = None;
         let mut current_border: Option<Border> = None;
+        let mut current_border_side: Option<(String, BorderSide)> = None; // (side_name, side)
+
+        // CellXfs parsing state
+        let mut in_cell_xfs = false;
+        let mut cell_xfs: Vec<CellXfEntry> = Vec::new();
 
         loop {
             match xml_reader.read_event_into(&mut buf) {
@@ -115,6 +135,118 @@ impl StylesParser {
                             num_fmts.insert(id, code);
                         }
                     }
+                    b"cellXfs" => {
+                        in_cell_xfs = true;
+                    }
+                    b"xf" if in_cell_xfs => {
+                        let mut font_id: usize = 0;
+                        let mut fill_id: usize = 0;
+                        let mut border_id: usize = 0;
+                        let mut num_fmt_id: u32 = 0;
+
+                        for attr in e.attributes().flatten() {
+                            match attr.key.as_ref() {
+                                b"fontId" => {
+                                    font_id =
+                                        String::from_utf8_lossy(&attr.value).parse().unwrap_or(0);
+                                }
+                                b"fillId" => {
+                                    fill_id =
+                                        String::from_utf8_lossy(&attr.value).parse().unwrap_or(0);
+                                }
+                                b"borderId" => {
+                                    border_id =
+                                        String::from_utf8_lossy(&attr.value).parse().unwrap_or(0);
+                                }
+                                b"numFmtId" => {
+                                    num_fmt_id =
+                                        String::from_utf8_lossy(&attr.value).parse().unwrap_or(0);
+                                }
+                                _ => {}
+                            }
+                        }
+                        cell_xfs.push((font_id, fill_id, border_id, num_fmt_id, None, None, false));
+                    }
+                    b"alignment" if in_cell_xfs && !cell_xfs.is_empty() => {
+                        let last = cell_xfs.last_mut().unwrap();
+                        for attr in e.attributes().flatten() {
+                            match attr.key.as_ref() {
+                                b"horizontal" => {
+                                    let val = String::from_utf8_lossy(&attr.value);
+                                    last.4 = Some(match val.as_ref() {
+                                        "left" => HorizontalAlignment::Left,
+                                        "center" => HorizontalAlignment::Center,
+                                        "right" => HorizontalAlignment::Right,
+                                        "justify" => HorizontalAlignment::Justify,
+                                        _ => HorizontalAlignment::General,
+                                    });
+                                }
+                                b"vertical" => {
+                                    let val = String::from_utf8_lossy(&attr.value);
+                                    last.5 = Some(match val.as_ref() {
+                                        "top" => VerticalAlignment::Top,
+                                        "center" => VerticalAlignment::Center,
+                                        "bottom" => VerticalAlignment::Bottom,
+                                        _ => VerticalAlignment::Center,
+                                    });
+                                }
+                                b"wrapText" => {
+                                    last.6 = String::from_utf8_lossy(&attr.value) == "1";
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    b"color" if current_font.is_some() => {
+                        if let Some(ref mut font) = current_font {
+                            for attr in e.attributes().flatten() {
+                                if attr.key.as_ref() == b"rgb" {
+                                    let val = String::from_utf8_lossy(&attr.value);
+                                    font.color = Color::from_hex(&val);
+                                }
+                            }
+                        }
+                    }
+                    b"fgColor" if current_fill.is_some() => {
+                        if let Some(ref mut fill) = current_fill {
+                            for attr in e.attributes().flatten() {
+                                if attr.key.as_ref() == b"rgb" {
+                                    let val = String::from_utf8_lossy(&attr.value);
+                                    fill.fg_color = Color::from_hex(&val);
+                                }
+                            }
+                        }
+                    }
+                    b"bgColor" if current_fill.is_some() => {
+                        if let Some(ref mut fill) = current_fill {
+                            for attr in e.attributes().flatten() {
+                                if attr.key.as_ref() == b"rgb" {
+                                    let val = String::from_utf8_lossy(&attr.value);
+                                    fill.bg_color = Color::from_hex(&val);
+                                }
+                            }
+                        }
+                    }
+                    b"left" | b"right" | b"top" | b"bottom" if current_border.is_some() => {
+                        let side_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
+                        let mut side = BorderSide::default();
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"style" {
+                                let val = String::from_utf8_lossy(&attr.value);
+                                side.style = match val.as_ref() {
+                                    "thin" => BorderStyle::Thin,
+                                    "medium" => BorderStyle::Medium,
+                                    "thick" => BorderStyle::Thick,
+                                    "dashed" => BorderStyle::Dashed,
+                                    "dotted" => BorderStyle::Dotted,
+                                    "double" => BorderStyle::Double,
+                                    "hair" => BorderStyle::Hair,
+                                    _ => BorderStyle::None,
+                                };
+                            }
+                        }
+                        current_border_side = Some((side_name, side));
+                    }
                     _ => {}
                 },
                 Ok(Event::End(e)) => match e.name().as_ref() {
@@ -133,6 +265,22 @@ impl StylesParser {
                             borders.push(border);
                         }
                     }
+                    b"left" | b"right" | b"top" | b"bottom" => {
+                        if let (Some(ref mut border), Some((side_name, side))) =
+                            (&mut current_border, current_border_side.take())
+                        {
+                            match side_name.as_str() {
+                                "left" => border.left = side,
+                                "right" => border.right = side,
+                                "top" => border.top = side,
+                                "bottom" => border.bottom = side,
+                                _ => {}
+                            }
+                        }
+                    }
+                    b"cellXfs" => {
+                        in_cell_xfs = false;
+                    }
                     _ => {}
                 },
                 Ok(Event::Eof) => break,
@@ -147,17 +295,50 @@ impl StylesParser {
         }
 
         // Add parsed components to registry
-        for font in fonts {
-            registry.add_font(font);
+        for font in &fonts {
+            registry.add_font(font.clone());
         }
-        for fill in fills {
-            registry.add_fill(fill);
+        for fill in &fills {
+            registry.add_fill(fill.clone());
         }
-        for border in borders {
-            registry.add_border(border);
+        for border in &borders {
+            registry.add_border(border.clone());
         }
-        for (id, code) in num_fmts {
-            registry.add_number_format(id, code);
+        for (id, code) in &num_fmts {
+            registry.add_number_format(*id, code.clone());
+        }
+
+        // Build Style objects from cellXfs entries
+        for (idx, (font_id, fill_id, border_id, num_fmt_id, h_align, v_align, wrap_text)) in
+            cell_xfs.into_iter().enumerate()
+        {
+            let font = fonts.get(font_id).cloned().unwrap_or_default();
+            let fill = fills.get(fill_id).cloned().unwrap_or_default();
+            let border = borders.get(border_id).cloned().unwrap_or_default();
+            let number_format = if num_fmt_id > 0 {
+                NumberFormat {
+                    id: Some(num_fmt_id),
+                    code: num_fmts.get(&num_fmt_id).cloned(),
+                }
+            } else {
+                NumberFormat::default()
+            };
+
+            let style = Style {
+                font,
+                fill,
+                border,
+                number_format,
+                horizontal_alignment: h_align.unwrap_or(HorizontalAlignment::General),
+                vertical_alignment: v_align.unwrap_or(VerticalAlignment::Center),
+                wrap_text,
+                text_rotation: None,
+                indent: None,
+                shrink_to_fit: false,
+            };
+
+            // Add style with the cellXfs index as the ID (starts from 0)
+            registry.add_with_id(idx as u32, style);
         }
 
         Ok(registry)

@@ -391,8 +391,10 @@ impl WorkbookParser {
         let mut current_cell_style: Option<u32> = None;
         let mut current_value = String::new();
         let mut current_formula = String::new();
+        let mut current_inline_string = String::new();
         let mut in_value = false;
         let mut in_formula = false;
+        let mut in_inline_string = false;
 
         loop {
             match xml_reader.read_event_into(&mut buf) {
@@ -426,11 +428,27 @@ impl WorkbookParser {
                             in_formula = true;
                             current_formula.clear();
                         }
+                        b"t" => {
+                            // Text element inside <is> for inline strings
+                            in_inline_string = true;
+                            current_inline_string.clear();
+                        }
                         b"row" => {
                             // Could parse row attributes (height, hidden) here
                         }
                         b"col" => {
                             // Could parse column attributes (width, hidden) here
+                        }
+                        b"mergeCell" => {
+                            // Parse merged cell range
+                            for attr in e.attributes().flatten() {
+                                if attr.key.as_ref() == b"ref" {
+                                    let ref_str = String::from_utf8_lossy(&attr.value);
+                                    if let Ok(range) = crate::range::Range::parse(&ref_str) {
+                                        sheet.add_merged_range(range);
+                                    }
+                                }
+                            }
                         }
                         _ => {}
                     }
@@ -440,6 +458,8 @@ impl WorkbookParser {
                         current_value.push_str(&e.unescape().unwrap_or_default());
                     } else if in_formula {
                         current_formula.push_str(&e.unescape().unwrap_or_default());
+                    } else if in_inline_string {
+                        current_inline_string.push_str(&e.unescape().unwrap_or_default());
                     }
                 }
                 Ok(Event::End(e)) => {
@@ -447,8 +467,14 @@ impl WorkbookParser {
                         b"c" => {
                             // Finalize cell
                             if let Some(ref cell_ref) = current_cell_ref {
+                                // Use inline string if available, otherwise use value
+                                let value_str = if !current_inline_string.is_empty() {
+                                    &current_inline_string
+                                } else {
+                                    &current_value
+                                };
                                 let value = self.parse_cell_value(
-                                    &current_value,
+                                    value_str,
                                     &current_formula,
                                     current_cell_type.as_deref(),
                                     shared_strings,
@@ -459,7 +485,7 @@ impl WorkbookParser {
                                     cell = cell.with_style(style_id);
                                 }
 
-                                sheet.set_cell(cell_ref.clone(), cell.value);
+                                sheet.insert_cell(cell);
                             }
 
                             // Reset state
@@ -468,12 +494,16 @@ impl WorkbookParser {
                             current_cell_style = None;
                             current_value.clear();
                             current_formula.clear();
+                            current_inline_string.clear();
                         }
                         b"v" => {
                             in_value = false;
                         }
                         b"f" => {
                             in_formula = false;
+                        }
+                        b"t" => {
+                            in_inline_string = false;
                         }
                         _ => {}
                     }

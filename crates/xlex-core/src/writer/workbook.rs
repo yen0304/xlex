@@ -69,8 +69,8 @@ impl WorkbookWriter {
         // Write xl/workbook.xml
         self.write_workbook_xml(&mut zip, workbook, options)?;
 
-        // Write xl/styles.xml
-        self.write_styles(&mut zip, workbook, options)?;
+        // Write xl/styles.xml and get style ID mapping
+        let style_id_map = self.write_styles(&mut zip, workbook, options)?;
 
         // Write xl/sharedStrings.xml if needed
         if !workbook.shared_strings().is_empty() {
@@ -79,7 +79,14 @@ impl WorkbookWriter {
 
         // Write sheets
         for (index, sheet_name) in workbook.sheet_names().iter().enumerate() {
-            self.write_sheet(&mut zip, workbook, sheet_name, index + 1, options)?;
+            self.write_sheet(
+                &mut zip,
+                workbook,
+                sheet_name,
+                index + 1,
+                options,
+                &style_id_map,
+            )?;
         }
 
         zip.finish()?;
@@ -328,40 +335,373 @@ impl WorkbookWriter {
     fn write_styles<W: Write + std::io::Seek>(
         &self,
         zip: &mut ZipWriter<W>,
-        _workbook: &Workbook,
+        workbook: &Workbook,
         options: SimpleFileOptions,
-    ) -> XlexResult<()> {
+    ) -> XlexResult<std::collections::HashMap<u32, u32>> {
+        use crate::style::{
+            Border, BorderStyle, Fill, FillPattern, Font, HorizontalAlignment, VerticalAlignment,
+        };
+
         zip.start_file("xl/styles.xml", options)?;
 
-        // Minimal styles.xml
-        let content = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-    <fonts count="1">
-        <font>
-            <sz val="11"/>
-            <color theme="1"/>
-            <name val="Calibri"/>
-            <family val="2"/>
-            <scheme val="minor"/>
-        </font>
-    </fonts>
-    <fills count="2">
-        <fill><patternFill patternType="none"/></fill>
-        <fill><patternFill patternType="gray125"/></fill>
-    </fills>
-    <borders count="1">
-        <border><left/><right/><top/><bottom/><diagonal/></border>
-    </borders>
+        let registry = workbook.style_registry();
+
+        // Map from registry style ID to cellXfs index
+        let mut style_id_map: std::collections::HashMap<u32, u32> =
+            std::collections::HashMap::new();
+
+        // Collect unique components from registry
+        let mut fonts: Vec<Font> = vec![Font::default()]; // Default font at index 0
+        let mut fills: Vec<Fill> = vec![
+            Fill::default(), // none pattern at index 0
+            Fill {
+                pattern: FillPattern::Gray125,
+                ..Default::default()
+            }, // gray125 at index 1
+        ];
+        let mut borders: Vec<Border> = vec![Border::default()]; // Empty border at index 0
+        let mut num_fmts: Vec<(u32, String)> = vec![];
+
+        // CellXf entries: (fontId, fillId, borderId, numFmtId, style)
+        struct CellXf {
+            font_id: usize,
+            fill_id: usize,
+            border_id: usize,
+            num_fmt_id: u32,
+            alignment: Option<(HorizontalAlignment, VerticalAlignment, bool)>, // (h_align, v_align, wrap)
+        }
+
+        let mut cell_xfs: Vec<CellXf> = vec![CellXf {
+            font_id: 0,
+            fill_id: 0,
+            border_id: 0,
+            num_fmt_id: 0,
+            alignment: None,
+        }];
+
+        // Helper to find or add font
+        fn find_or_add_font(fonts: &mut Vec<Font>, font: &Font) -> usize {
+            fonts.iter().position(|f| f == font).unwrap_or_else(|| {
+                fonts.push(font.clone());
+                fonts.len() - 1
+            })
+        }
+
+        // Helper to find or add fill
+        fn find_or_add_fill(fills: &mut Vec<Fill>, fill: &Fill) -> usize {
+            fills.iter().position(|f| f == fill).unwrap_or_else(|| {
+                fills.push(fill.clone());
+                fills.len() - 1
+            })
+        }
+
+        // Helper to find or add border
+        fn find_or_add_border(borders: &mut Vec<Border>, border: &Border) -> usize {
+            borders.iter().position(|b| b == border).unwrap_or_else(|| {
+                borders.push(border.clone());
+                borders.len() - 1
+            })
+        }
+
+        // Process each style in registry and build mapping
+        let mut next_custom_fmt_id = 164u32;
+        for (style_id, style) in registry.iter() {
+            let font_id = find_or_add_font(&mut fonts, &style.font);
+            let fill_id = find_or_add_fill(&mut fills, &style.fill);
+            let border_id = find_or_add_border(&mut borders, &style.border);
+
+            // Handle number format
+            let num_fmt_id = if let Some(code) = &style.number_format.code {
+                // Custom format
+                let existing = num_fmts.iter().find(|(_, c)| c == code);
+                if let Some((id, _)) = existing {
+                    *id
+                } else {
+                    let id = next_custom_fmt_id;
+                    next_custom_fmt_id += 1;
+                    num_fmts.push((id, code.clone()));
+                    id
+                }
+            } else {
+                style.number_format.id.unwrap_or(0)
+            };
+
+            let alignment = if style.horizontal_alignment != HorizontalAlignment::General
+                || style.vertical_alignment != VerticalAlignment::Center
+                || style.wrap_text
+            {
+                Some((
+                    style.horizontal_alignment,
+                    style.vertical_alignment,
+                    style.wrap_text,
+                ))
+            } else {
+                None
+            };
+
+            // Map registry style ID to cellXfs index (current length before pushing)
+            let xf_index = cell_xfs.len() as u32;
+            style_id_map.insert(style_id, xf_index);
+
+            cell_xfs.push(CellXf {
+                font_id,
+                fill_id,
+                border_id,
+                num_fmt_id,
+                alignment,
+            });
+        }
+
+        // Generate XML
+        let mut content = String::from(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#,
+        );
+
+        // Number formats (if any custom)
+        if !num_fmts.is_empty() {
+            content.push_str(&format!(
+                r#"
+    <numFmts count="{}">"#,
+                num_fmts.len()
+            ));
+            for (id, code) in &num_fmts {
+                content.push_str(&format!(
+                    r#"
+        <numFmt numFmtId="{}" formatCode="{}"/>"#,
+                    id,
+                    escape_xml(code)
+                ));
+            }
+            content.push_str(
+                r#"
+    </numFmts>"#,
+            );
+        }
+
+        // Fonts
+        content.push_str(&format!(
+            r#"
+    <fonts count="{}">"#,
+            fonts.len()
+        ));
+        for font in &fonts {
+            content.push_str(
+                r#"
+        <font>"#,
+            );
+            if font.bold {
+                content.push_str(r#"<b/>"#);
+            }
+            if font.italic {
+                content.push_str(r#"<i/>"#);
+            }
+            if font.underline {
+                content.push_str(r#"<u/>"#);
+            }
+            if font.strikethrough {
+                content.push_str(r#"<strike/>"#);
+            }
+            content.push_str(&format!(r#"<sz val="{}"/>"#, font.size.unwrap_or(11.0)));
+            if let Some(ref color) = font.color {
+                if let Some(argb) = color.to_argb_hex() {
+                    content.push_str(&format!(r#"<color rgb="{}"/>"#, argb));
+                }
+            } else {
+                content.push_str(r#"<color theme="1"/>"#);
+            }
+            content.push_str(&format!(
+                r#"<name val="{}"/>"#,
+                font.name.as_deref().unwrap_or("Calibri")
+            ));
+            content.push_str(r#"<family val="2"/>"#);
+            content.push_str(
+                r#"
+        </font>"#,
+            );
+        }
+        content.push_str(
+            r#"
+    </fonts>"#,
+        );
+
+        // Fills
+        content.push_str(&format!(
+            r#"
+    <fills count="{}">"#,
+            fills.len()
+        ));
+        for fill in &fills {
+            content.push_str(
+                r#"
+        <fill>"#,
+            );
+            let pattern_type = match fill.pattern {
+                FillPattern::None => "none",
+                FillPattern::Solid => "solid",
+                FillPattern::Gray125 => "gray125",
+                FillPattern::MediumGray => "mediumGray",
+                FillPattern::DarkGray => "darkGray",
+                FillPattern::LightGray => "lightGray",
+                _ => "solid",
+            };
+            if fill.pattern == FillPattern::None || fill.pattern == FillPattern::Gray125 {
+                content.push_str(&format!(r#"<patternFill patternType="{}"/>"#, pattern_type));
+            } else {
+                content.push_str(&format!(r#"<patternFill patternType="{}">"#, pattern_type));
+                if let Some(ref fg) = fill.fg_color {
+                    if let Some(argb) = fg.to_argb_hex() {
+                        content.push_str(&format!(r#"<fgColor rgb="{}"/>"#, argb));
+                    }
+                }
+                if let Some(ref bg) = fill.bg_color {
+                    if let Some(argb) = bg.to_argb_hex() {
+                        content.push_str(&format!(r#"<bgColor rgb="{}"/>"#, argb));
+                    }
+                }
+                content.push_str(r#"</patternFill>"#);
+            }
+            content.push_str(r#"</fill>"#);
+        }
+        content.push_str(
+            r#"
+    </fills>"#,
+        );
+
+        // Borders
+        content.push_str(&format!(
+            r#"
+    <borders count="{}">"#,
+            borders.len()
+        ));
+        for border in &borders {
+            content.push_str(
+                r#"
+        <border>"#,
+            );
+
+            fn write_border_side(name: &str, side: &crate::style::BorderSide) -> String {
+                if side.style == BorderStyle::None {
+                    return format!("<{}/>", name);
+                }
+                let style_str = match side.style {
+                    BorderStyle::Thin => "thin",
+                    BorderStyle::Medium => "medium",
+                    BorderStyle::Thick => "thick",
+                    BorderStyle::Dashed => "dashed",
+                    BorderStyle::Dotted => "dotted",
+                    BorderStyle::Double => "double",
+                    BorderStyle::Hair => "hair",
+                    _ => "thin",
+                };
+                if let Some(ref color) = side.color {
+                    if let Some(argb) = color.to_argb_hex() {
+                        return format!(
+                            r#"<{} style="{}"><color rgb="{}"/></{}>"#,
+                            name, style_str, argb, name
+                        );
+                    }
+                }
+                format!(r#"<{} style="{}"/>"#, name, style_str)
+            }
+
+            content.push_str(&write_border_side("left", &border.left));
+            content.push_str(&write_border_side("right", &border.right));
+            content.push_str(&write_border_side("top", &border.top));
+            content.push_str(&write_border_side("bottom", &border.bottom));
+            content.push_str(r#"<diagonal/>"#);
+            content.push_str(r#"</border>"#);
+        }
+        content.push_str(
+            r#"
+    </borders>"#,
+        );
+
+        // Cell style xfs (base styles)
+        content.push_str(
+            r#"
     <cellStyleXfs count="1">
         <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
-    </cellStyleXfs>
-    <cellXfs count="1">
-        <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-    </cellXfs>
-</styleSheet>"#;
+    </cellStyleXfs>"#,
+        );
+
+        // Cell xfs (actual cell formats)
+        content.push_str(&format!(
+            r#"
+    <cellXfs count="{}">"#,
+            cell_xfs.len()
+        ));
+        for xf in &cell_xfs {
+            let apply_font = if xf.font_id > 0 {
+                r#" applyFont="1""#
+            } else {
+                ""
+            };
+            let apply_fill = if xf.fill_id > 0 {
+                r#" applyFill="1""#
+            } else {
+                ""
+            };
+            let apply_border = if xf.border_id > 0 {
+                r#" applyBorder="1""#
+            } else {
+                ""
+            };
+            let apply_fmt = if xf.num_fmt_id > 0 {
+                r#" applyNumberFormat="1""#
+            } else {
+                ""
+            };
+
+            if let Some((h_align, v_align, wrap)) = &xf.alignment {
+                let h_str = match h_align {
+                    HorizontalAlignment::Left => "left",
+                    HorizontalAlignment::Center => "center",
+                    HorizontalAlignment::Right => "right",
+                    HorizontalAlignment::Justify => "justify",
+                    _ => "general",
+                };
+                let v_str = match v_align {
+                    VerticalAlignment::Top => "top",
+                    VerticalAlignment::Center => "center",
+                    VerticalAlignment::Bottom => "bottom",
+                    _ => "center",
+                };
+                let wrap_attr = if *wrap { r#" wrapText="1""# } else { "" };
+                content.push_str(&format!(
+                    r#"
+        <xf numFmtId="{}" fontId="{}" fillId="{}" borderId="{}" xfId="0"{}{}{}{} applyAlignment="1"><alignment horizontal="{}" vertical="{}"{}/></xf>"#,
+                    xf.num_fmt_id, xf.font_id, xf.fill_id, xf.border_id,
+                    apply_font, apply_fill, apply_border, apply_fmt,
+                    h_str, v_str, wrap_attr
+                ));
+            } else {
+                content.push_str(&format!(
+                    r#"
+        <xf numFmtId="{}" fontId="{}" fillId="{}" borderId="{}" xfId="0"{}{}{}{}/>"#,
+                    xf.num_fmt_id,
+                    xf.font_id,
+                    xf.fill_id,
+                    xf.border_id,
+                    apply_font,
+                    apply_fill,
+                    apply_border,
+                    apply_fmt
+                ));
+            }
+        }
+        content.push_str(
+            r#"
+    </cellXfs>"#,
+        );
+
+        content.push_str(
+            r#"
+</styleSheet>"#,
+        );
 
         zip.write_all(content.as_bytes())?;
-        Ok(())
+        Ok(style_id_map)
     }
 
     fn write_shared_strings<W: Write + std::io::Seek>(
@@ -397,6 +737,7 @@ impl WorkbookWriter {
         sheet_name: &str,
         sheet_number: usize,
         options: SimpleFileOptions,
+        style_id_map: &std::collections::HashMap<u32, u32>,
     ) -> XlexResult<()> {
         let sheet = workbook
             .get_sheet(sheet_name)
@@ -436,9 +777,12 @@ impl WorkbookWriter {
                 let type_attr = cell_type
                     .map(|t| format!(r#" t="{}""#, t))
                     .unwrap_or_default();
+
+                // Map cell's style_id to cellXfs index using the mapping
                 let style_attr = cell
                     .style_id
-                    .map(|s| format!(r#" s="{}""#, s))
+                    .and_then(|registry_id| style_id_map.get(&registry_id))
+                    .map(|xf_index| format!(r#" s="{}""#, xf_index))
                     .unwrap_or_default();
 
                 match &cell.value {
@@ -457,6 +801,15 @@ impl WorkbookWriter {
                     CellValue::Empty => {
                         // Skip empty cells
                     }
+                    CellValue::String(_) => {
+                        // inlineStr type requires <is><t>...</t></is> format
+                        if let Some(value) = cell_value {
+                            content.push_str(&format!(
+                                r#"<c r="{}"{}{}><is><t>{}</t></is></c>"#,
+                                cell_ref, type_attr, style_attr, value
+                            ));
+                        }
+                    }
                     _ => {
                         if let Some(value) = cell_value {
                             content.push_str(&format!(
@@ -471,10 +824,22 @@ impl WorkbookWriter {
             content.push_str("</row>\n");
         }
 
-        content.push_str(
-            r#"    </sheetData>
-</worksheet>"#,
-        );
+        content.push_str("    </sheetData>\n");
+
+        // Write merged cells if any
+        let merged_ranges = sheet.merged_ranges();
+        if !merged_ranges.is_empty() {
+            content.push_str(&format!(
+                r#"    <mergeCells count="{}">"#,
+                merged_ranges.len()
+            ));
+            for range in merged_ranges {
+                content.push_str(&format!(r#"<mergeCell ref="{}"/>"#, range.to_a1()));
+            }
+            content.push_str("</mergeCells>\n");
+        }
+
+        content.push_str("</worksheet>");
 
         zip.write_all(content.as_bytes())?;
         Ok(())
