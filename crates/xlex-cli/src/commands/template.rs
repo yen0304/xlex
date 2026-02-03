@@ -1357,3 +1357,1145 @@ fn find_placeholders(s: &str) -> Vec<String> {
 
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use xlex_core::{CellRef, CellValue, Workbook};
+
+    fn default_global() -> GlobalOptions {
+        GlobalOptions {
+            verbose: false,
+            quiet: true,
+            format: OutputFormat::Text,
+            dry_run: false,
+            no_color: true,
+            color: false,
+            json_errors: false,
+            output: None,
+        }
+    }
+
+    fn create_template_workbook(
+        dir: &TempDir,
+        name: &str,
+        cells: &[(&str, &str)],
+    ) -> std::path::PathBuf {
+        let path = dir.path().join(name);
+        let mut wb = Workbook::new();
+        let sheet = wb.get_sheet_mut("Sheet1").unwrap();
+        for (cell_ref, value) in cells {
+            sheet.set_cell(
+                CellRef::parse(cell_ref).unwrap(),
+                CellValue::String(value.to_string()),
+            );
+        }
+        wb.save_as(&path).unwrap();
+        path
+    }
+
+    // ==========================================================================
+    // TemplateVars tests
+    // ==========================================================================
+
+    #[test]
+    fn test_template_vars_new() {
+        let vars = TemplateVars::new();
+        assert!(vars.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_template_vars_set_get() {
+        let mut vars = TemplateVars::new();
+        vars.set("name", "Alice");
+        vars.set("age", "30");
+
+        assert_eq!(vars.get("name"), Some("Alice".to_string()));
+        assert_eq!(vars.get("age"), Some("30".to_string()));
+        assert!(vars.get("unknown").is_none());
+    }
+
+    #[test]
+    fn test_template_vars_from_json() {
+        let json = serde_json::json!({
+            "name": "Bob",
+            "nested": {
+                "value": "inner"
+            }
+        });
+        let vars = TemplateVars::from_json(json);
+
+        assert_eq!(vars.get("name"), Some("Bob".to_string()));
+        assert_eq!(vars.get("nested.value"), Some("inner".to_string()));
+    }
+
+    #[test]
+    fn test_template_vars_nested_access() {
+        let json = serde_json::json!({
+            "user": {
+                "profile": {
+                    "name": "Charlie"
+                }
+            }
+        });
+        let vars = TemplateVars::from_json(json);
+
+        assert_eq!(vars.get("user.profile.name"), Some("Charlie".to_string()));
+    }
+
+    #[test]
+    fn test_template_vars_array_access() {
+        let json = serde_json::json!({
+            "items": ["a", "b", "c"],
+            "records": [
+                {"id": 1},
+                {"id": 2}
+            ]
+        });
+        let vars = TemplateVars::from_json(json);
+
+        let items = vars.get_array("items");
+        assert!(items.is_some());
+        assert_eq!(items.unwrap().len(), 3);
+
+        let records = vars.get_array("records");
+        assert!(records.is_some());
+        assert_eq!(records.unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_template_vars_get_bool() {
+        let json = serde_json::json!({
+            "flag_true": true,
+            "flag_false": false,
+            "str_yes": "yes",
+            "str_no": "no",
+            "str_1": "1",
+            "num_1": 1,
+            "num_0": 0,
+            "empty": "",
+            "null_val": null
+        });
+        let vars = TemplateVars::from_json(json);
+
+        assert_eq!(vars.get_bool("flag_true"), Some(true));
+        assert_eq!(vars.get_bool("flag_false"), Some(false));
+        assert_eq!(vars.get_bool("str_yes"), Some(true));
+        assert_eq!(vars.get_bool("str_no"), Some(false));
+        assert_eq!(vars.get_bool("str_1"), Some(true));
+        assert_eq!(vars.get_bool("num_1"), Some(true));
+        assert_eq!(vars.get_bool("num_0"), Some(false));
+        assert_eq!(vars.get_bool("empty"), Some(false));
+        assert_eq!(vars.get_bool("null_val"), Some(false));
+    }
+
+    #[test]
+    fn test_template_vars_merge_object() {
+        let mut vars = TemplateVars::new();
+        vars.set("existing", "value");
+
+        let new_obj = serde_json::json!({
+            "new_key": "new_value",
+            "existing": "overwritten"
+        });
+        vars.merge_object(&new_obj);
+
+        assert_eq!(vars.get("new_key"), Some("new_value".to_string()));
+        assert_eq!(vars.get("existing"), Some("overwritten".to_string()));
+    }
+
+    // ==========================================================================
+    // find_placeholders tests
+    // ==========================================================================
+
+    #[test]
+    fn test_find_placeholders_simple() {
+        let result = find_placeholders("Hello {{name}}!");
+        assert_eq!(result, vec!["name"]);
+    }
+
+    #[test]
+    fn test_find_placeholders_multiple() {
+        let result = find_placeholders("{{first}} and {{second}}");
+        assert_eq!(result, vec!["first", "second"]);
+    }
+
+    #[test]
+    fn test_find_placeholders_with_filters() {
+        let result = find_placeholders("{{name|upper}} {{amount|currency}}");
+        assert_eq!(result, vec!["name", "amount"]);
+    }
+
+    #[test]
+    fn test_find_placeholders_no_duplicates() {
+        let result = find_placeholders("{{name}} is {{name}}");
+        assert_eq!(result, vec!["name"]);
+    }
+
+    #[test]
+    fn test_find_placeholders_ignores_conditionals() {
+        let result = find_placeholders("{{#if show}}content{{/if}}");
+        assert!(result.is_empty());
+    }
+
+    // ==========================================================================
+    // apply_filter tests
+    // ==========================================================================
+
+    #[test]
+    fn test_filter_upper() {
+        assert_eq!(apply_filter("hello", "upper"), "HELLO");
+        assert_eq!(apply_filter("hello", "uppercase"), "HELLO");
+    }
+
+    #[test]
+    fn test_filter_lower() {
+        assert_eq!(apply_filter("HELLO", "lower"), "hello");
+        assert_eq!(apply_filter("HELLO", "lowercase"), "hello");
+    }
+
+    #[test]
+    fn test_filter_capitalize() {
+        assert_eq!(apply_filter("hello world", "capitalize"), "Hello world");
+        assert_eq!(apply_filter("hello world", "title"), "Hello world");
+    }
+
+    #[test]
+    fn test_filter_trim() {
+        assert_eq!(apply_filter("  hello  ", "trim"), "hello");
+    }
+
+    #[test]
+    fn test_filter_default() {
+        assert_eq!(apply_filter("", "default:N/A"), "N/A");
+        assert_eq!(apply_filter("value", "default:N/A"), "value");
+    }
+
+    #[test]
+    fn test_filter_truncate() {
+        assert_eq!(apply_filter("hello world", "truncate:5"), "hello...");
+        assert_eq!(apply_filter("hi", "truncate:5"), "hi");
+    }
+
+    #[test]
+    fn test_filter_replace() {
+        assert_eq!(
+            apply_filter("hello world", "replace:world:universe"),
+            "hello universe"
+        );
+    }
+
+    #[test]
+    fn test_filter_currency() {
+        assert_eq!(apply_filter("100", "currency"), "$100.00");
+        assert_eq!(apply_filter("100", "currency:€"), "€100.00");
+        assert_eq!(apply_filter("invalid", "currency"), "invalid");
+    }
+
+    #[test]
+    fn test_filter_number() {
+        assert_eq!(apply_filter("3.14159", "number:2"), "3.14");
+        assert_eq!(apply_filter("3.14159", "format_number:3"), "3.142");
+    }
+
+    #[test]
+    fn test_filter_percent() {
+        assert_eq!(apply_filter("0.5", "percent"), "50.0%");
+        assert_eq!(apply_filter("0.123", "percent"), "12.3%");
+    }
+
+    #[test]
+    fn test_filter_abs() {
+        assert_eq!(apply_filter("-5", "abs"), "5");
+        assert_eq!(apply_filter("5", "abs"), "5");
+    }
+
+    #[test]
+    fn test_filter_round() {
+        assert_eq!(apply_filter("3.567", "round"), "4");
+        assert_eq!(apply_filter("3.567", "round:2"), "3.57");
+    }
+
+    #[test]
+    fn test_filter_unknown() {
+        // Unknown filter should return value unchanged
+        assert_eq!(apply_filter("value", "unknown_filter"), "value");
+    }
+
+    // ==========================================================================
+    // evaluate_condition tests
+    // ==========================================================================
+
+    #[test]
+    fn test_evaluate_condition_equality() {
+        let mut vars = TemplateVars::new();
+        vars.set("status", "active");
+
+        assert!(evaluate_condition("status == 'active'", &vars));
+        assert!(!evaluate_condition("status == 'inactive'", &vars));
+    }
+
+    #[test]
+    fn test_evaluate_condition_inequality() {
+        let mut vars = TemplateVars::new();
+        vars.set("status", "active");
+
+        assert!(evaluate_condition("status != 'inactive'", &vars));
+        assert!(!evaluate_condition("status != 'active'", &vars));
+    }
+
+    #[test]
+    fn test_evaluate_condition_numeric_comparisons() {
+        let mut vars = TemplateVars::new();
+        vars.set("value", "10");
+
+        assert!(evaluate_condition("value > 5", &vars));
+        assert!(!evaluate_condition("value > 15", &vars));
+        assert!(evaluate_condition("value < 15", &vars));
+        assert!(!evaluate_condition("value < 5", &vars));
+        assert!(evaluate_condition("value >= 10", &vars));
+        assert!(evaluate_condition("value <= 10", &vars));
+    }
+
+    #[test]
+    fn test_evaluate_condition_boolean() {
+        let json = serde_json::json!({
+            "show": true,
+            "hide": false
+        });
+        let vars = TemplateVars::from_json(json);
+
+        assert!(evaluate_condition("show", &vars));
+        assert!(!evaluate_condition("hide", &vars));
+    }
+
+    // ==========================================================================
+    // process_template_string tests
+    // ==========================================================================
+
+    #[test]
+    fn test_process_template_simple() {
+        let mut vars = TemplateVars::new();
+        vars.set("name", "Alice");
+
+        let result = process_template_string("Hello {{name}}!", &vars);
+        assert_eq!(result, "Hello Alice!");
+    }
+
+    #[test]
+    fn test_process_template_with_filter() {
+        let mut vars = TemplateVars::new();
+        vars.set("name", "alice");
+
+        let result = process_template_string("Hello {{name|upper}}!", &vars);
+        assert_eq!(result, "Hello ALICE!");
+    }
+
+    #[test]
+    fn test_process_template_conditional() {
+        let json = serde_json::json!({
+            "show": true,
+            "name": "Bob"
+        });
+        let vars = TemplateVars::from_json(json);
+
+        let result = process_template_string("{{#if show}}Hello {{name}}{{/if}}", &vars);
+        assert_eq!(result, "Hello Bob");
+    }
+
+    #[test]
+    fn test_process_template_conditional_false() {
+        let json = serde_json::json!({
+            "show": false,
+            "name": "Bob"
+        });
+        let vars = TemplateVars::from_json(json);
+
+        let result = process_template_string("{{#if show}}Hello {{name}}{{/if}}", &vars);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_process_template_conditional_else() {
+        let json = serde_json::json!({
+            "premium": false
+        });
+        let vars = TemplateVars::from_json(json);
+
+        let result =
+            process_template_string("{{#if premium}}Premium User{{else}}Free User{{/if}}", &vars);
+        assert_eq!(result, "Free User");
+    }
+
+    #[test]
+    fn test_process_template_unless() {
+        let json = serde_json::json!({
+            "hide": false
+        });
+        let vars = TemplateVars::from_json(json);
+
+        let result = process_template_string("{{#unless hide}}Visible{{/unless}}", &vars);
+        assert_eq!(result, "Visible");
+    }
+
+    // ==========================================================================
+    // value_to_string tests
+    // ==========================================================================
+
+    #[test]
+    fn test_value_to_string() {
+        assert_eq!(value_to_string(&serde_json::json!("hello")), "hello");
+        assert_eq!(value_to_string(&serde_json::json!(42)), "42");
+        assert_eq!(value_to_string(&serde_json::json!(3.14)), "3.14");
+        assert_eq!(value_to_string(&serde_json::json!(true)), "true");
+        assert_eq!(value_to_string(&serde_json::json!(null)), "");
+    }
+
+    // ==========================================================================
+    // yaml_to_json tests
+    // ==========================================================================
+
+    #[test]
+    fn test_yaml_to_json_string() {
+        let yaml: serde_yaml::Value = serde_yaml::from_str("hello").unwrap();
+        let json = yaml_to_json(&yaml);
+        assert_eq!(json, serde_json::json!("hello"));
+    }
+
+    #[test]
+    fn test_yaml_to_json_number() {
+        let yaml: serde_yaml::Value = serde_yaml::from_str("42").unwrap();
+        let json = yaml_to_json(&yaml);
+        assert_eq!(json, serde_json::json!(42));
+    }
+
+    #[test]
+    fn test_yaml_to_json_object() {
+        let yaml: serde_yaml::Value = serde_yaml::from_str("name: Alice\nage: 30").unwrap();
+        let json = yaml_to_json(&yaml);
+        assert_eq!(json, serde_json::json!({"name": "Alice", "age": 30}));
+    }
+
+    #[test]
+    fn test_yaml_to_json_array() {
+        let yaml: serde_yaml::Value = serde_yaml::from_str("- a\n- b\n- c").unwrap();
+        let json = yaml_to_json(&yaml);
+        assert_eq!(json, serde_json::json!(["a", "b", "c"]));
+    }
+
+    // ==========================================================================
+    // init() tests
+    // ==========================================================================
+
+    #[test]
+    fn test_init_report_template() {
+        let dir = TempDir::new().unwrap();
+        let output = dir.path().join("report.xlsx");
+
+        let result = init(&output, "report", &default_global());
+        assert!(result.is_ok());
+        assert!(output.exists());
+
+        let wb = Workbook::open(&output).unwrap();
+        let sheet = wb.get_sheet("Sheet1").unwrap();
+        let cell_a1 = sheet.get_cell(&CellRef::parse("A1").unwrap()).unwrap();
+        if let CellValue::String(s) = &cell_a1.value {
+            assert!(s.contains("{{title}}"));
+        }
+    }
+
+    #[test]
+    fn test_init_invoice_template() {
+        let dir = TempDir::new().unwrap();
+        let output = dir.path().join("invoice.xlsx");
+
+        let result = init(&output, "invoice", &default_global());
+        assert!(result.is_ok());
+        assert!(output.exists());
+
+        let wb = Workbook::open(&output).unwrap();
+        let sheet = wb.get_sheet("Sheet1").unwrap();
+        let cell_a1 = sheet.get_cell(&CellRef::parse("A1").unwrap()).unwrap();
+        if let CellValue::String(s) = &cell_a1.value {
+            assert!(s.contains("INVOICE"));
+        }
+    }
+
+    #[test]
+    fn test_init_data_template() {
+        let dir = TempDir::new().unwrap();
+        let output = dir.path().join("data.xlsx");
+
+        let result = init(&output, "data", &default_global());
+        assert!(result.is_ok());
+        assert!(output.exists());
+
+        let wb = Workbook::open(&output).unwrap();
+        let sheet = wb.get_sheet("Sheet1").unwrap();
+        let cell_a1 = sheet.get_cell(&CellRef::parse("A1").unwrap()).unwrap();
+        if let CellValue::String(s) = &cell_a1.value {
+            assert!(s.contains("{{header1}}"));
+        }
+    }
+
+    #[test]
+    fn test_init_unknown_type() {
+        let dir = TempDir::new().unwrap();
+        let output = dir.path().join("unknown.xlsx");
+
+        let result = init(&output, "unknown_type", &default_global());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_init_dry_run() {
+        let dir = TempDir::new().unwrap();
+        let output = dir.path().join("dryrun.xlsx");
+
+        let global = GlobalOptions {
+            dry_run: true,
+            ..default_global()
+        };
+
+        let result = init(&output, "report", &global);
+        assert!(result.is_ok());
+        assert!(!output.exists()); // File should not be created in dry-run
+    }
+
+    #[test]
+    fn test_init_file_exists() {
+        let dir = TempDir::new().unwrap();
+        let output = dir.path().join("existing.xlsx");
+
+        // Create the file first
+        Workbook::new().save_as(&output).unwrap();
+
+        let result = init(&output, "report", &default_global());
+        assert!(result.is_err()); // Should fail because file exists
+    }
+
+    // ==========================================================================
+    // list() tests
+    // ==========================================================================
+
+    #[test]
+    fn test_list_placeholders() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(
+            &dir,
+            "template.xlsx",
+            &[
+                ("A1", "{{name}}"),
+                ("A2", "{{email}}"),
+                ("B1", "{{name}}"), // duplicate
+            ],
+        );
+
+        let result = list(&template, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_list_placeholders_json_format() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(&dir, "template.xlsx", &[("A1", "{{title}}")]);
+
+        let global = GlobalOptions {
+            format: OutputFormat::Json,
+            ..default_global()
+        };
+
+        let result = list(&template, &global);
+        assert!(result.is_ok());
+    }
+
+    // ==========================================================================
+    // validate() tests
+    // ==========================================================================
+
+    #[test]
+    fn test_validate_generate_schema() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(
+            &dir,
+            "template.xlsx",
+            &[("A1", "{{name}}"), ("A2", "{{email}}")],
+        );
+
+        let result = validate(&template, None, true, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_with_json_vars() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(
+            &dir,
+            "template.xlsx",
+            &[("A1", "{{name}}"), ("A2", "{{email}}")],
+        );
+
+        // Create vars file
+        let vars_path = dir.path().join("vars.json");
+        std::fs::write(
+            &vars_path,
+            r#"{"name": "Alice", "email": "alice@example.com"}"#,
+        )
+        .unwrap();
+
+        let result = validate(&template, Some(&vars_path), false, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_with_yaml_vars() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(&dir, "template.xlsx", &[("A1", "{{name}}")]);
+
+        // Create YAML vars file
+        let vars_path = dir.path().join("vars.yaml");
+        std::fs::write(&vars_path, "name: Alice\n").unwrap();
+
+        let result = validate(&template, Some(&vars_path), false, &default_global());
+        assert!(result.is_ok());
+    }
+
+    // ==========================================================================
+    // preview() tests
+    // ==========================================================================
+
+    #[test]
+    fn test_preview_with_defines() {
+        let dir = TempDir::new().unwrap();
+        let template =
+            create_template_workbook(&dir, "template.xlsx", &[("A1", "Hello {{name}}!")]);
+
+        let defines = vec!["name=World".to_string()];
+        let result = preview(&template, None, &defines, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_preview_json_format() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(&dir, "template.xlsx", &[("A1", "{{greeting}}")]);
+
+        let defines = vec!["greeting=Hi".to_string()];
+        let global = GlobalOptions {
+            format: OutputFormat::Json,
+            ..default_global()
+        };
+
+        let result = preview(&template, None, &defines, &global);
+        assert!(result.is_ok());
+    }
+
+    // ==========================================================================
+    // create() tests
+    // ==========================================================================
+
+    #[test]
+    fn test_create_template_from_source() {
+        let dir = TempDir::new().unwrap();
+
+        // Create source workbook
+        let source = dir.path().join("source.xlsx");
+        let mut wb = Workbook::new();
+        wb.get_sheet_mut("Sheet1").unwrap().set_cell(
+            CellRef::parse("A1").unwrap(),
+            CellValue::String("Title".to_string()),
+        );
+        wb.save_as(&source).unwrap();
+
+        let output = dir.path().join("template.xlsx");
+        let placeholders = vec!["A1=title".to_string()];
+
+        let result = create(&source, &output, &placeholders, &default_global());
+        assert!(result.is_ok());
+        assert!(output.exists());
+
+        // Verify placeholder was added
+        let wb = Workbook::open(&output).unwrap();
+        let cell = wb
+            .get_sheet("Sheet1")
+            .unwrap()
+            .get_cell(&CellRef::parse("A1").unwrap())
+            .unwrap();
+        if let CellValue::String(s) = &cell.value {
+            assert_eq!(s, "{{title}}");
+        }
+    }
+
+    #[test]
+    fn test_create_with_sheet_reference() {
+        let dir = TempDir::new().unwrap();
+
+        let source = dir.path().join("source.xlsx");
+        let mut wb = Workbook::new();
+        wb.get_sheet_mut("Sheet1").unwrap().set_cell(
+            CellRef::parse("B2").unwrap(),
+            CellValue::String("Value".to_string()),
+        );
+        wb.save_as(&source).unwrap();
+
+        let output = dir.path().join("template.xlsx");
+        let placeholders = vec!["Sheet1!B2=myvalue".to_string()];
+
+        let result = create(&source, &output, &placeholders, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_create_dry_run() {
+        let dir = TempDir::new().unwrap();
+
+        let source = dir.path().join("source.xlsx");
+        Workbook::new().save_as(&source).unwrap();
+
+        let output = dir.path().join("template.xlsx");
+        let placeholders = vec!["A1=test".to_string()];
+
+        let global = GlobalOptions {
+            dry_run: true,
+            ..default_global()
+        };
+
+        let result = create(&source, &output, &placeholders, &global);
+        assert!(result.is_ok());
+        assert!(!output.exists());
+    }
+
+    // ==========================================================================
+    // apply_single() tests
+    // ==========================================================================
+
+    #[test]
+    fn test_apply_single() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(
+            &dir,
+            "template.xlsx",
+            &[("A1", "Hello {{name}}!"), ("A2", "Email: {{email}}")],
+        );
+
+        let output = dir.path().join("output.xlsx");
+        let mut vars = TemplateVars::new();
+        vars.set("name", "Alice");
+        vars.set("email", "alice@example.com");
+
+        let result = apply_single(&template, &output, &vars, &default_global());
+        assert!(result.is_ok());
+        assert!(output.exists());
+
+        let wb = Workbook::open(&output).unwrap();
+        let sheet = wb.get_sheet("Sheet1").unwrap();
+
+        let cell_a1 = sheet.get_cell(&CellRef::parse("A1").unwrap()).unwrap();
+        if let CellValue::String(s) = &cell_a1.value {
+            assert_eq!(s, "Hello Alice!");
+        }
+    }
+
+    #[test]
+    fn test_apply_single_with_filters() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(&dir, "template.xlsx", &[("A1", "{{name|upper}}")]);
+
+        let output = dir.path().join("output.xlsx");
+        let mut vars = TemplateVars::new();
+        vars.set("name", "alice");
+
+        let result = apply_single(&template, &output, &vars, &default_global());
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&output).unwrap();
+        let cell = wb
+            .get_sheet("Sheet1")
+            .unwrap()
+            .get_cell(&CellRef::parse("A1").unwrap())
+            .unwrap();
+        if let CellValue::String(s) = &cell.value {
+            assert_eq!(s, "ALICE");
+        }
+    }
+
+    #[test]
+    fn test_apply_single_dry_run() {
+        // Note: apply_single does not check dry_run flag
+        // The dry_run check is in the apply() dispatcher (before calling apply_single)
+        // So this test verifies that apply_single still creates the file
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(&dir, "template.xlsx", &[("A1", "{{test}}")]);
+
+        let output = dir.path().join("output.xlsx");
+        let vars = TemplateVars::new();
+
+        let global = GlobalOptions {
+            dry_run: true,
+            ..default_global()
+        };
+
+        let result = apply_single(&template, &output, &vars, &global);
+        assert!(result.is_ok());
+        // apply_single ignores dry_run, file is created
+        assert!(output.exists());
+    }
+
+    // ==========================================================================
+    // load_template_vars tests
+    // ==========================================================================
+
+    #[test]
+    fn test_load_template_vars_json() {
+        let dir = TempDir::new().unwrap();
+        let vars_path = dir.path().join("vars.json");
+        std::fs::write(&vars_path, r#"{"name": "Test", "value": 42}"#).unwrap();
+
+        let vars = load_template_vars(Some(&vars_path), &[]).unwrap();
+        assert_eq!(vars.get("name"), Some("Test".to_string()));
+        assert_eq!(vars.get("value"), Some("42".to_string()));
+    }
+
+    #[test]
+    fn test_load_template_vars_yaml() {
+        let dir = TempDir::new().unwrap();
+        let vars_path = dir.path().join("vars.yaml");
+        std::fs::write(&vars_path, "name: YamlTest\ncount: 10").unwrap();
+
+        let vars = load_template_vars(Some(&vars_path), &[]).unwrap();
+        assert_eq!(vars.get("name"), Some("YamlTest".to_string()));
+        assert_eq!(vars.get("count"), Some("10".to_string()));
+    }
+
+    #[test]
+    fn test_load_template_vars_with_defines() {
+        let vars = load_template_vars(
+            None,
+            &["key1=value1".to_string(), "key2=value2".to_string()],
+        )
+        .unwrap();
+        assert_eq!(vars.get("key1"), Some("value1".to_string()));
+        assert_eq!(vars.get("key2"), Some("value2".to_string()));
+    }
+
+    #[test]
+    fn test_load_template_vars_defines_override() {
+        let dir = TempDir::new().unwrap();
+        let vars_path = dir.path().join("vars.json");
+        std::fs::write(&vars_path, r#"{"name": "FromFile"}"#).unwrap();
+
+        let vars = load_template_vars(Some(&vars_path), &["name=FromDefine".to_string()]).unwrap();
+        assert_eq!(vars.get("name"), Some("FromDefine".to_string()));
+    }
+
+    // ==========================================================================
+    // process_conditionals tests
+    // ==========================================================================
+
+    #[test]
+    fn test_process_conditionals_if_true() {
+        let json = serde_json::json!({"show": true});
+        let vars = TemplateVars::from_json(json);
+
+        let result = process_conditionals("Before {{#if show}}SHOWN{{/if}} After", &vars);
+        assert_eq!(result, "Before SHOWN After");
+    }
+
+    #[test]
+    fn test_process_conditionals_if_false() {
+        let json = serde_json::json!({"show": false});
+        let vars = TemplateVars::from_json(json);
+
+        let result = process_conditionals("Before {{#if show}}SHOWN{{/if}} After", &vars);
+        assert_eq!(result, "Before  After");
+    }
+
+    #[test]
+    fn test_process_conditionals_if_else() {
+        let json = serde_json::json!({"premium": false});
+        let vars = TemplateVars::from_json(json);
+
+        let result = process_conditionals("{{#if premium}}Premium{{else}}Basic{{/if}}", &vars);
+        assert_eq!(result, "Basic");
+    }
+
+    #[test]
+    fn test_process_conditionals_unless() {
+        let json = serde_json::json!({"hide": false});
+        let vars = TemplateVars::from_json(json);
+
+        let result = process_conditionals("{{#unless hide}}Visible{{/unless}}", &vars);
+        assert_eq!(result, "Visible");
+    }
+
+    #[test]
+    fn test_process_conditionals_unless_true() {
+        let json = serde_json::json!({"hide": true});
+        let vars = TemplateVars::from_json(json);
+
+        let result = process_conditionals("{{#unless hide}}Visible{{/unless}}", &vars);
+        assert_eq!(result, "");
+    }
+
+    // ==========================================================================
+    // resolve_value / resolve_number tests
+    // ==========================================================================
+
+    #[test]
+    fn test_resolve_value_quoted() {
+        let vars = TemplateVars::new();
+        assert_eq!(resolve_value("'hello'", &vars), "hello");
+        assert_eq!(resolve_value("\"world\"", &vars), "world");
+    }
+
+    #[test]
+    fn test_resolve_value_variable() {
+        let mut vars = TemplateVars::new();
+        vars.set("myvar", "myvalue");
+        assert_eq!(resolve_value("myvar", &vars), "myvalue");
+    }
+
+    #[test]
+    fn test_resolve_number() {
+        let mut vars = TemplateVars::new();
+        vars.set("num", "42");
+
+        assert_eq!(resolve_number("num", &vars), Some(42.0));
+        assert_eq!(resolve_number("100", &vars), Some(100.0));
+        assert_eq!(resolve_number("3.14", &vars), Some(3.14));
+    }
+
+    // ==========================================================================
+    // run() integration tests
+    // ==========================================================================
+
+    #[test]
+    fn test_run_init_command() {
+        let dir = TempDir::new().unwrap();
+        let output = dir.path().join("test_init.xlsx");
+
+        let args = TemplateArgs {
+            command: TemplateCommand::Init {
+                output,
+                template_type: "data".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_list_command() {
+        let dir = TempDir::new().unwrap();
+        let template =
+            create_template_workbook(&dir, "template.xlsx", &[("A1", "{{placeholder}}")]);
+
+        let args = TemplateArgs {
+            command: TemplateCommand::List { template },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_validate_command() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(&dir, "template.xlsx", &[("A1", "{{test}}")]);
+
+        let args = TemplateArgs {
+            command: TemplateCommand::Validate {
+                template,
+                vars: None,
+                schema: false,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_create_command() {
+        let dir = TempDir::new().unwrap();
+
+        let source = dir.path().join("source.xlsx");
+        Workbook::new().save_as(&source).unwrap();
+
+        let output = dir.path().join("new_template.xlsx");
+
+        let args = TemplateArgs {
+            command: TemplateCommand::Create {
+                source,
+                output,
+                placeholder: vec!["A1=myfield".to_string()],
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_preview_command() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(&dir, "template.xlsx", &[("A1", "{{msg}}")]);
+
+        let args = TemplateArgs {
+            command: TemplateCommand::Preview {
+                template,
+                vars: None,
+                define: vec!["msg=Hello".to_string()],
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_apply_command() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(&dir, "template.xlsx", &[("A1", "{{value}}")]);
+        let output = dir.path().join("applied.xlsx");
+
+        let args = TemplateArgs {
+            command: TemplateCommand::Apply {
+                template,
+                output,
+                vars: None,
+                define: vec!["value=123".to_string()],
+                per_record: false,
+                output_pattern: None,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_single_json_output() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(&dir, "template.xlsx", &[("A1", "{{value}}")]);
+        let output = dir.path().join("applied.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let vars = TemplateVars::new();
+        let result = apply_single(&template, &output, &vars, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_list_json_output() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(
+            &dir,
+            "template.xlsx",
+            &[("A1", "{{name}}"), ("B1", "{{age}}")],
+        );
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = list(&template, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_with_missing_vars() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(&dir, "template.xlsx", &[("A1", "{{name}}")]);
+
+        let result = validate(&template, None, false, &default_global());
+        // Should show warnings about missing variables but not error
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_create_with_multiple_placeholders() {
+        let dir = TempDir::new().unwrap();
+
+        let source = dir.path().join("source.xlsx");
+        {
+            let mut wb = Workbook::new();
+            wb.set_cell(
+                "Sheet1",
+                CellRef::new(1, 1),
+                CellValue::String("Value1".to_string()),
+            )
+            .unwrap();
+            wb.set_cell(
+                "Sheet1",
+                CellRef::new(2, 1),
+                CellValue::String("Value2".to_string()),
+            )
+            .unwrap();
+            wb.save_as(&source).unwrap();
+        }
+
+        let output = dir.path().join("new_template.xlsx");
+
+        let result = create(
+            &source,
+            &output,
+            &["A1=field1".to_string(), "B1=field2".to_string()],
+            &default_global(),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_preview_with_filters() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(&dir, "template.xlsx", &[("A1", "{{name|upper}}")]);
+
+        let result = preview(
+            &template,
+            None,
+            &["name=test".to_string()],
+            &default_global(),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_date() {
+        // Date filter formats dates
+        let result = apply_filter("2024-01-15", "date");
+        assert_eq!(result, "2024-01-15");
+    }
+
+    #[test]
+    fn test_filter_now() {
+        // Now filter returns current date
+        let result = apply_filter("", "now");
+        // Result should be a date string in YYYY-MM-DD format
+        assert!(result.len() >= 10);
+    }
+
+    #[test]
+    fn test_template_vars_get_method() {
+        let mut vars = TemplateVars::new();
+        vars.set("key", "value");
+        assert!(vars.get("key").is_some());
+        assert!(vars.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_apply_per_record_no_records() {
+        let dir = TempDir::new().unwrap();
+        let template = create_template_workbook(&dir, "template.xlsx", &[("A1", "{{value}}")]);
+        let output = dir.path().join("output.xlsx");
+
+        // vars without records array should fail
+        let vars = TemplateVars::new();
+        let result = apply_per_record(&template, &output, None, &vars, &default_global());
+        assert!(result.is_err());
+    }
+}

@@ -838,3 +838,833 @@ fn export_meta(source: &std::path::Path, dest: &str, global: &GlobalOptions) -> 
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use xlex_core::CellValue;
+
+    fn default_global() -> GlobalOptions {
+        GlobalOptions {
+            quiet: true,
+            verbose: false,
+            format: super::super::OutputFormat::Text,
+            no_color: true,
+            color: false,
+            json_errors: false,
+            dry_run: false,
+            output: None,
+        }
+    }
+
+    fn create_test_workbook(dir: &TempDir, name: &str) -> std::path::PathBuf {
+        let file_path = dir.path().join(name);
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+        file_path
+    }
+
+    fn setup_test_data(file: &std::path::Path) {
+        let mut wb = Workbook::open(file).unwrap();
+        // Header row
+        wb.set_cell(
+            "Sheet1",
+            xlex_core::CellRef::new(1, 1),
+            CellValue::String("Name".to_string()),
+        )
+        .unwrap();
+        wb.set_cell(
+            "Sheet1",
+            xlex_core::CellRef::new(2, 1),
+            CellValue::String("Age".to_string()),
+        )
+        .unwrap();
+        // Data rows
+        wb.set_cell(
+            "Sheet1",
+            xlex_core::CellRef::new(1, 2),
+            CellValue::String("Alice".to_string()),
+        )
+        .unwrap();
+        wb.set_cell(
+            "Sheet1",
+            xlex_core::CellRef::new(2, 2),
+            CellValue::Number(30.0),
+        )
+        .unwrap();
+        wb.set_cell(
+            "Sheet1",
+            xlex_core::CellRef::new(1, 3),
+            CellValue::String("Bob".to_string()),
+        )
+        .unwrap();
+        wb.set_cell(
+            "Sheet1",
+            xlex_core::CellRef::new(2, 3),
+            CellValue::Number(25.0),
+        )
+        .unwrap();
+        wb.save().unwrap();
+    }
+
+    #[test]
+    fn test_export_csv() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output.csv");
+        let result = export_csv(
+            &file_path,
+            &dest.to_string_lossy(),
+            None,
+            ',',
+            &default_global(),
+        );
+        assert!(result.is_ok());
+        assert!(dest.exists());
+
+        let content = std::fs::read_to_string(&dest).unwrap();
+        assert!(content.contains("Name"));
+        assert!(content.contains("Alice"));
+    }
+
+    #[test]
+    fn test_export_csv_to_stdout() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test.xlsx");
+        setup_test_data(&file_path);
+
+        let result = export_csv(&file_path, "-", None, ',', &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_export_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output.json");
+        let result = export_json(
+            &file_path,
+            &dest.to_string_lossy(),
+            None,
+            false,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+        assert!(dest.exists());
+    }
+
+    #[test]
+    fn test_export_json_with_header() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output.json");
+        let result = export_json(
+            &file_path,
+            &dest.to_string_lossy(),
+            None,
+            true,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+
+        let content = std::fs::read_to_string(&dest).unwrap();
+        // With header=true, keys should be "Name" and "Age"
+        assert!(content.contains("\"Name\""));
+    }
+
+    #[test]
+    fn test_export_tsv() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output.tsv");
+        let result = export_tsv(&file_path, &dest.to_string_lossy(), None, &default_global());
+        assert!(result.is_ok());
+        assert!(dest.exists());
+
+        let content = std::fs::read_to_string(&dest).unwrap();
+        assert!(content.contains('\t'));
+    }
+
+    #[test]
+    fn test_export_yaml() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output.yaml");
+        let result = export_yaml(&file_path, &dest.to_string_lossy(), None, &default_global());
+        assert!(result.is_ok());
+        assert!(dest.exists());
+    }
+
+    #[test]
+    fn test_export_markdown() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output.md");
+        let result = export_markdown(&file_path, &dest.to_string_lossy(), None, &default_global());
+        assert!(result.is_ok());
+        assert!(dest.exists());
+
+        let content = std::fs::read_to_string(&dest).unwrap();
+        // Markdown table should have pipes and separators
+        assert!(content.contains("|"));
+        assert!(content.contains("---"));
+    }
+
+    #[test]
+    fn test_export_ndjson() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output.ndjson");
+        let result = export_ndjson(
+            &file_path,
+            &dest.to_string_lossy(),
+            None,
+            false,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+        assert!(dest.exists());
+    }
+
+    #[test]
+    fn test_export_ndjson_with_header() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output.ndjson");
+        let result = export_ndjson(
+            &file_path,
+            &dest.to_string_lossy(),
+            None,
+            true,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_export_meta() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("meta.json");
+        let result = export_meta(&file_path, &dest.to_string_lossy(), &default_global());
+        assert!(result.is_ok());
+        assert!(dest.exists());
+
+        let content = std::fs::read_to_string(&dest).unwrap();
+        assert!(content.contains("sheets"));
+        assert!(content.contains("Sheet1"));
+    }
+
+    #[test]
+    fn test_cell_to_json() {
+        assert_eq!(cell_to_json(&CellValue::Empty), serde_json::Value::Null);
+        assert_eq!(
+            cell_to_json(&CellValue::String("test".to_string())),
+            serde_json::Value::String("test".to_string())
+        );
+        assert_eq!(
+            cell_to_json(&CellValue::Number(42.0)),
+            serde_json::json!(42.0)
+        );
+        assert_eq!(
+            cell_to_json(&CellValue::Boolean(true)),
+            serde_json::Value::Bool(true)
+        );
+    }
+
+    // Additional tests for better coverage
+
+    #[test]
+    fn test_export_csv_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test_dry.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output_dry.csv");
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = export_csv(&file_path, &dest.to_string_lossy(), None, ',', &global);
+        assert!(result.is_ok());
+        // Note: export functions don't check dry_run - they always export
+        // dry_run is only checked in run() dispatcher for some commands
+    }
+
+    #[test]
+    fn test_export_json_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test_json_dry.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output_dry.json");
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = export_json(&file_path, &dest.to_string_lossy(), None, false, &global);
+        assert!(result.is_ok());
+        // Note: export functions don't check dry_run - they always export
+    }
+
+    #[test]
+    fn test_export_json_to_stdout() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test_stdout.xlsx");
+        setup_test_data(&file_path);
+
+        let result = export_json(&file_path, "-", None, false, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_export_yaml_to_stdout() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test_yaml_stdout.xlsx");
+        setup_test_data(&file_path);
+
+        let result = export_yaml(&file_path, "-", None, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_export_markdown_to_stdout() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test_md_stdout.xlsx");
+        setup_test_data(&file_path);
+
+        let result = export_markdown(&file_path, "-", None, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_export_ndjson_to_stdout() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test_ndjson_stdout.xlsx");
+        setup_test_data(&file_path);
+
+        let result = export_ndjson(&file_path, "-", None, false, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_export_meta_to_stdout() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test_meta_stdout.xlsx");
+        setup_test_data(&file_path);
+
+        let result = export_meta(&file_path, "-", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_export_all_csv() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test_all.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output_all.csv");
+        let result = export_all_csv(&file_path, &dest.to_string_lossy(), ',', &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_export_all_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test_all_json.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output_all.json");
+        let result = export_all_json(
+            &file_path,
+            &dest.to_string_lossy(),
+            false,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_export_all_yaml() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test_all_yaml.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output_all.yaml");
+        let result = export_all_yaml(&file_path, &dest.to_string_lossy(), &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_export_all_markdown() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test_all_md.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output_all.md");
+        let result = export_all_markdown(&file_path, &dest.to_string_lossy(), &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_export_all_ndjson() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "test_all_ndjson.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("output_all.ndjson");
+        let result = export_all_ndjson(
+            &file_path,
+            &dest.to_string_lossy(),
+            false,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_csv_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_csv.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("run_output.csv");
+        let args = ExportArgs {
+            command: ExportCommand::Csv {
+                source: file_path,
+                dest: dest.to_string_lossy().to_string(),
+                sheet: None,
+                delimiter: ',',
+                all: false,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_json_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_json.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("run_output.json");
+        let args = ExportArgs {
+            command: ExportCommand::Json {
+                source: file_path,
+                dest: dest.to_string_lossy().to_string(),
+                sheet: None,
+                header: false,
+                all: false,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_tsv_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_tsv.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("run_output.tsv");
+        let args = ExportArgs {
+            command: ExportCommand::Tsv {
+                source: file_path,
+                dest: dest.to_string_lossy().to_string(),
+                sheet: None,
+                all: false,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_yaml_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_yaml.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("run_output.yaml");
+        let args = ExportArgs {
+            command: ExportCommand::Yaml {
+                source: file_path,
+                dest: dest.to_string_lossy().to_string(),
+                sheet: None,
+                all: false,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_markdown_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_md.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("run_output.md");
+        let args = ExportArgs {
+            command: ExportCommand::Markdown {
+                source: file_path,
+                dest: dest.to_string_lossy().to_string(),
+                sheet: None,
+                all: false,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_ndjson_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_ndjson.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("run_output.ndjson");
+        let args = ExportArgs {
+            command: ExportCommand::Ndjson {
+                source: file_path,
+                dest: dest.to_string_lossy().to_string(),
+                sheet: None,
+                header: false,
+                all: false,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_meta_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_meta.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("run_meta.json");
+        let args = ExportArgs {
+            command: ExportCommand::Meta {
+                source: file_path,
+                dest: dest.to_string_lossy().to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_csv_all_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_csv_all.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("run_all.csv");
+        let args = ExportArgs {
+            command: ExportCommand::Csv {
+                source: file_path,
+                dest: dest.to_string_lossy().to_string(),
+                sheet: None,
+                delimiter: ',',
+                all: true,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_tsv_all_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_tsv_all.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("run_all.tsv");
+        let args = ExportArgs {
+            command: ExportCommand::Tsv {
+                source: file_path,
+                dest: dest.to_string_lossy().to_string(),
+                sheet: None,
+                all: true,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cell_to_json_formula() {
+        let value = CellValue::Formula {
+            formula: "SUM(A1:A10)".to_string(),
+            cached_result: Some(Box::new(CellValue::Number(100.0))),
+        };
+        let result = cell_to_json(&value);
+        // cell_to_json uses to_display_string() for formulas, which returns "=formula"
+        assert_eq!(
+            result,
+            serde_json::Value::String("=SUM(A1:A10)".to_string())
+        );
+    }
+
+    #[test]
+    fn test_cell_to_json_formula_no_cache() {
+        let value = CellValue::Formula {
+            formula: "SUM(A1:A10)".to_string(),
+            cached_result: None,
+        };
+        let result = cell_to_json(&value);
+        // cell_to_json uses to_display_string() for formulas
+        assert_eq!(
+            result,
+            serde_json::Value::String("=SUM(A1:A10)".to_string())
+        );
+    }
+
+    #[test]
+    fn test_export_csv_with_sheet() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "sheet_csv.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("sheet_output.csv");
+        let result = export_csv(
+            &file_path,
+            &dest.to_string_lossy(),
+            Some("Sheet1"),
+            ',',
+            &default_global(),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_export_csv_semicolon_delimiter() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "semi_csv.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("semi_output.csv");
+        let result = export_csv(
+            &file_path,
+            &dest.to_string_lossy(),
+            None,
+            ';',
+            &default_global(),
+        );
+        assert!(result.is_ok());
+
+        let content = std::fs::read_to_string(&dest).unwrap();
+        assert!(content.contains(";"));
+    }
+
+    #[test]
+    fn test_export_tsv_to_stdout() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "tsv_stdout.xlsx");
+        setup_test_data(&file_path);
+
+        let result = export_tsv(&file_path, "-", None, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_yaml_all_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_yaml_all.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("run_yaml_all_output.yaml");
+        let args = ExportArgs {
+            command: ExportCommand::Yaml {
+                source: file_path,
+                dest: dest.to_string_lossy().to_string(),
+                sheet: None,
+                all: true,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_markdown_all_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_md_all.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("run_md_all_output.md");
+        let args = ExportArgs {
+            command: ExportCommand::Markdown {
+                source: file_path,
+                dest: dest.to_string_lossy().to_string(),
+                sheet: None,
+                all: true,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_ndjson_all_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_ndjson_all.xlsx");
+        setup_test_data(&file_path);
+
+        let dest = temp_dir.path().join("run_ndjson_all_output.ndjson");
+        let args = ExportArgs {
+            command: ExportCommand::Ndjson {
+                source: file_path,
+                dest: dest.to_string_lossy().to_string(),
+                sheet: None,
+                header: false,
+                all: true,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_export_csv_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "sheet_nf.xlsx");
+
+        let dest = temp_dir.path().join("sheet_nf_output.csv");
+        let result = export_csv(
+            &file_path,
+            &dest.to_string_lossy(),
+            Some("NonexistentSheet"),
+            ',',
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_export_json_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "json_sheet_nf.xlsx");
+
+        let dest = temp_dir.path().join("json_sheet_nf.json");
+        let result = export_json(
+            &file_path,
+            &dest.to_string_lossy(),
+            Some("NonexistentSheet"),
+            false,
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_export_tsv_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "tsv_sheet_nf.xlsx");
+
+        let dest = temp_dir.path().join("tsv_sheet_nf.tsv");
+        let result = export_tsv(
+            &file_path,
+            &dest.to_string_lossy(),
+            Some("NonexistentSheet"),
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_export_yaml_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "yaml_sheet_nf.xlsx");
+
+        let dest = temp_dir.path().join("yaml_sheet_nf.yaml");
+        let result = export_yaml(
+            &file_path,
+            &dest.to_string_lossy(),
+            Some("NonexistentSheet"),
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_export_markdown_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "md_sheet_nf.xlsx");
+
+        let dest = temp_dir.path().join("md_sheet_nf.md");
+        let result = export_markdown(
+            &file_path,
+            &dest.to_string_lossy(),
+            Some("NonexistentSheet"),
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_export_ndjson_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "ndjson_sheet_nf.xlsx");
+
+        let dest = temp_dir.path().join("ndjson_sheet_nf.ndjson");
+        let result = export_ndjson(
+            &file_path,
+            &dest.to_string_lossy(),
+            Some("NonexistentSheet"),
+            false,
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cell_to_json_datetime() {
+        // DateTime in xlex_core is stored as f64 (Excel serial date)
+        let value = CellValue::DateTime(44945.4375); // 2024-01-15 10:30
+        let result = cell_to_json(&value);
+        // DateTime is serialized via to_display_string() which returns a string
+        assert!(result.is_string());
+    }
+
+    #[test]
+    fn test_cell_to_json_error() {
+        use xlex_core::cell::CellError;
+        let value = CellValue::Error(CellError::Value);
+        let result = cell_to_json(&value);
+        // Error is serialized as string
+        assert!(result.is_string());
+    }
+}

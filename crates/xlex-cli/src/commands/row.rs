@@ -596,3 +596,624 @@ fn find(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use xlex_core::CellValue;
+
+    fn default_global() -> GlobalOptions {
+        GlobalOptions {
+            quiet: true,
+            verbose: false,
+            format: OutputFormat::Text,
+            no_color: true,
+            color: false,
+            json_errors: false,
+            dry_run: false,
+            output: None,
+        }
+    }
+
+    fn create_test_workbook(dir: &TempDir, name: &str) -> std::path::PathBuf {
+        let file_path = dir.path().join(name);
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+        file_path
+    }
+
+    fn setup_test_data(file: &std::path::Path) {
+        let mut wb = Workbook::open(file).unwrap();
+        // Set up test data in rows 1-3, columns A-C
+        for row in 1..=3 {
+            for col in 1..=3 {
+                let cell_ref = xlex_core::CellRef::new(col, row);
+                let value = CellValue::Number((row * 10 + col) as f64);
+                wb.set_cell("Sheet1", cell_ref, value).unwrap();
+            }
+        }
+        wb.save().unwrap();
+    }
+
+    #[test]
+    fn test_get_row() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get.xlsx");
+        setup_test_data(&file_path);
+
+        let result = get(&file_path, "Sheet1", 1, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_row_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_json.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = get(&file_path, "Sheet1", 1, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_row_csv() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_csv.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Csv;
+
+        let result = get(&file_path, "Sheet1", 1, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_append_row() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "append.xlsx");
+
+        let result = append(&file_path, "Sheet1", "1,2,3", &default_global());
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = xlex_core::CellRef::new(1, 1);
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        assert_eq!(value, CellValue::Number(1.0));
+    }
+
+    #[test]
+    fn test_insert_row() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "insert.xlsx");
+        setup_test_data(&file_path);
+
+        let result = insert(&file_path, "Sheet1", 2, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_delete_row() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "delete.xlsx");
+        setup_test_data(&file_path);
+
+        let result = delete(&file_path, "Sheet1", 1, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_copy_row() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "copy.xlsx");
+        setup_test_data(&file_path);
+
+        let result = copy(&file_path, "Sheet1", 1, 5, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_move_row_down() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "move_down.xlsx");
+        setup_test_data(&file_path);
+
+        let result = move_row(&file_path, "Sheet1", 1, 5, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_move_row_up() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "move_up.xlsx");
+        setup_test_data(&file_path);
+
+        let result = move_row(&file_path, "Sheet1", 3, 1, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_height_set() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "height.xlsx");
+
+        let result = height(&file_path, "Sheet1", 1, Some(30.0), &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_height_get() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "height_get.xlsx");
+
+        // Set height first
+        height(&file_path, "Sheet1", 1, Some(30.0), &default_global()).unwrap();
+
+        // Then get it
+        let result = height(&file_path, "Sheet1", 1, None, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_hide_row() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "hide.xlsx");
+
+        let result = hide(&file_path, "Sheet1", 1, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_unhide_row() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "unhide.xlsx");
+
+        // Hide first
+        hide(&file_path, "Sheet1", 1, &default_global()).unwrap();
+
+        let result = unhide(&file_path, "Sheet1", 1, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_find_rows() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "find.xlsx");
+        setup_test_data(&file_path);
+
+        let result = find(&file_path, "Sheet1", "1", None, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_find_rows_with_column() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "find_col.xlsx");
+        setup_test_data(&file_path);
+
+        let result = find(&file_path, "Sheet1", "1", Some("A"), &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_dry_run_operations() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        assert!(append(&file_path, "Sheet1", "1,2,3", &global).is_ok());
+        assert!(insert(&file_path, "Sheet1", 1, &global).is_ok());
+        assert!(delete(&file_path, "Sheet1", 1, &global).is_ok());
+        assert!(copy(&file_path, "Sheet1", 1, 5, &global).is_ok());
+        assert!(move_row(&file_path, "Sheet1", 1, 5, &global).is_ok());
+        assert!(height(&file_path, "Sheet1", 1, Some(30.0), &global).is_ok());
+        assert!(hide(&file_path, "Sheet1", 1, &global).is_ok());
+        assert!(unhide(&file_path, "Sheet1", 1, &global).is_ok());
+    }
+
+    // Additional tests for better coverage
+
+    #[test]
+    fn test_run_get_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_get.xlsx");
+        setup_test_data(&file_path);
+
+        let args = RowArgs {
+            command: RowCommand::Get {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                row: 1,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_append_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_append.xlsx");
+
+        let args = RowArgs {
+            command: RowCommand::Append {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                values: "1,2,3".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_insert_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_insert.xlsx");
+        setup_test_data(&file_path);
+
+        let args = RowArgs {
+            command: RowCommand::Insert {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                row: 2,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_delete_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_delete.xlsx");
+        setup_test_data(&file_path);
+
+        let args = RowArgs {
+            command: RowCommand::Delete {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                row: 1,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_copy_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_copy.xlsx");
+        setup_test_data(&file_path);
+
+        let args = RowArgs {
+            command: RowCommand::Copy {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                source: 1,
+                dest: 5,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_move_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_move.xlsx");
+        setup_test_data(&file_path);
+
+        let args = RowArgs {
+            command: RowCommand::Move {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                source: 1,
+                dest: 5,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_height_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_height.xlsx");
+
+        let args = RowArgs {
+            command: RowCommand::Height {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                row: 1,
+                height: Some(30.0),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_hide_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_hide.xlsx");
+
+        let args = RowArgs {
+            command: RowCommand::Hide {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                row: 1,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_unhide_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_unhide.xlsx");
+
+        hide(&file_path, "Sheet1", 1, &default_global()).unwrap();
+
+        let args = RowArgs {
+            command: RowCommand::Unhide {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                row: 1,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_find_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_find.xlsx");
+        setup_test_data(&file_path);
+
+        let args = RowArgs {
+            command: RowCommand::Find {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                pattern: "1".to_string(),
+                column: None,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_row_empty() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_empty.xlsx");
+
+        let result = get(&file_path, "Sheet1", 1, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_append_row_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "append_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = append(&file_path, "Sheet1", "1,2,3", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_insert_row_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "insert_json.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = insert(&file_path, "Sheet1", 2, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_delete_row_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "delete_json.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = delete(&file_path, "Sheet1", 1, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_copy_row_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "copy_json.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = copy(&file_path, "Sheet1", 1, 5, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_height_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "height_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = height(&file_path, "Sheet1", 1, Some(30.0), &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_height_get_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "height_get_json.xlsx");
+
+        height(&file_path, "Sheet1", 1, Some(30.0), &default_global()).unwrap();
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = height(&file_path, "Sheet1", 1, None, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_find_rows_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "find_json.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = find(&file_path, "Sheet1", "1", None, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_find_rows_no_match() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "find_nomatch.xlsx");
+        setup_test_data(&file_path);
+
+        let result = find(&file_path, "Sheet1", "nonexistent", None, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "notfound.xlsx");
+
+        let result = get(&file_path, "NonExistent", 1, &default_global());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_append_with_string_values() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "append_str.xlsx");
+
+        let result = append(&file_path, "Sheet1", "hello,world,test", &default_global());
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = xlex_core::CellRef::new(1, 1);
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        assert_eq!(value, CellValue::String("hello".to_string()));
+    }
+
+    #[test]
+    fn test_insert_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "insert_verbose.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = insert(&file_path, "Sheet1", 2, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_delete_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "delete_verbose.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = delete(&file_path, "Sheet1", 1, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_copy_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "copy_verbose.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = copy(&file_path, "Sheet1", 1, 5, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_move_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "move_verbose.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = move_row(&file_path, "Sheet1", 1, 5, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_hide_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "hide_verbose.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = hide(&file_path, "Sheet1", 1, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_unhide_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "unhide_verbose.xlsx");
+
+        // First hide the row
+        hide(&file_path, "Sheet1", 1, &default_global()).unwrap();
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = unhide(&file_path, "Sheet1", 1, &global);
+        assert!(result.is_ok());
+    }
+}

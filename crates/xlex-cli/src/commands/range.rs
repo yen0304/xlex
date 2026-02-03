@@ -1324,3 +1324,1514 @@ fn filter(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use xlex_core::CellValue;
+
+    fn default_global() -> GlobalOptions {
+        GlobalOptions {
+            quiet: true,
+            verbose: false,
+            format: OutputFormat::Text,
+            no_color: true,
+            color: false,
+            json_errors: false,
+            dry_run: false,
+            output: None,
+        }
+    }
+
+    fn create_test_workbook(dir: &TempDir, name: &str) -> std::path::PathBuf {
+        let file_path = dir.path().join(name);
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+        file_path
+    }
+
+    fn setup_test_data(file: &std::path::Path) {
+        let mut wb = Workbook::open(file).unwrap();
+        // Set up test data in A1:C3 (1-indexed: col 1-3, row 1-3)
+        for row in 1..=3u32 {
+            for col in 1..=3u32 {
+                let cell_ref = xlex_core::CellRef::new(col, row);
+                let value = CellValue::Number((row * 10 + col - 1) as f64);
+                wb.set_cell("Sheet1", cell_ref, value).unwrap();
+            }
+        }
+        wb.save().unwrap();
+    }
+
+    #[test]
+    fn test_get_range() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get.xlsx");
+        setup_test_data(&file_path);
+
+        let result = get(&file_path, "Sheet1", "A1:C3", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_range_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_json.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = get(&file_path, "Sheet1", "A1:C3", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_range_csv() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_csv.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Csv;
+
+        let result = get(&file_path, "Sheet1", "A1:C3", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_copy_range() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "copy.xlsx");
+        setup_test_data(&file_path);
+
+        let result = copy(&file_path, "Sheet1", "A1:B2", "E1", &default_global());
+        assert!(result.is_ok());
+
+        // Verify copy
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = xlex_core::CellRef::new(5, 1); // E1 = col 5, row 1 (1-indexed)
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        assert_eq!(value, CellValue::Number(10.0));
+    }
+
+    #[test]
+    fn test_move_range() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "move.xlsx");
+        setup_test_data(&file_path);
+
+        let result = move_range(&file_path, "Sheet1", "A1:B2", "E1", &default_global());
+        assert!(result.is_ok());
+
+        // Verify move - source should be empty
+        let wb = Workbook::open(&file_path).unwrap();
+        let source_cell = xlex_core::CellRef::new(1, 1); // A1 = col 1, row 1 (1-indexed)
+        let source_value = wb.get_cell("Sheet1", &source_cell).unwrap();
+        assert_eq!(source_value, CellValue::Empty);
+
+        // Destination should have the value
+        let dest_cell = xlex_core::CellRef::new(5, 1); // E1 = col 5, row 1 (1-indexed)
+        let dest_value = wb.get_cell("Sheet1", &dest_cell).unwrap();
+        assert_eq!(dest_value, CellValue::Number(10.0));
+    }
+
+    #[test]
+    fn test_clear_range() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear.xlsx");
+        setup_test_data(&file_path);
+
+        let result = clear(&file_path, "Sheet1", "A1:B2", false, &default_global());
+        assert!(result.is_ok());
+
+        // Verify cleared
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = xlex_core::CellRef::new(1, 1); // A1 = col 1, row 1 (1-indexed)
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        assert_eq!(value, CellValue::Empty);
+    }
+
+    #[test]
+    fn test_fill_range() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "fill.xlsx");
+
+        let result = fill(&file_path, "Sheet1", "A1:C3", "test", &default_global());
+        assert!(result.is_ok());
+
+        // Verify fill
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = xlex_core::CellRef::new(1, 1); // A1 = col 1, row 1 (1-indexed)
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        assert_eq!(value, CellValue::String("test".to_string()));
+    }
+
+    #[test]
+    fn test_merge_range() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "merge.xlsx");
+
+        let result = merge(&file_path, "Sheet1", "A1:B2", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_unmerge_range() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "unmerge.xlsx");
+
+        // Merge first
+        merge(&file_path, "Sheet1", "A1:B2", &default_global()).unwrap();
+
+        let result = unmerge(&file_path, "Sheet1", "A1:B2", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_name_range() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "name.xlsx");
+
+        let result = name(&file_path, "TestRange", "A1:B10", None, &default_global());
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&file_path).unwrap();
+        let names = wb.defined_names();
+        assert!(names.iter().any(|n| n.name == "TestRange"));
+    }
+
+    #[test]
+    fn test_name_range_with_sheet() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "name_sheet.xlsx");
+
+        let result = name(
+            &file_path,
+            "LocalRange",
+            "A1:B10",
+            Some("Sheet1"),
+            &default_global(),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_names_list() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "names.xlsx");
+
+        // Add a named range first
+        name(&file_path, "MyRange", "A1:A10", None, &default_global()).unwrap();
+
+        let result = names(&file_path, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_nonempty() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "validate.xlsx");
+        setup_test_data(&file_path);
+
+        let result = validate(&file_path, "Sheet1", "A1:C3", "nonempty", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_numeric() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "validate_num.xlsx");
+        setup_test_data(&file_path);
+
+        let result = validate(&file_path, "Sheet1", "A1:C3", "numeric", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sort_range() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "sort.xlsx");
+        setup_test_data(&file_path);
+
+        let result = sort(
+            &file_path,
+            "Sheet1",
+            "A1:C3",
+            None,
+            false,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sort_range_descending() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "sort_desc.xlsx");
+        setup_test_data(&file_path);
+
+        let result = sort(&file_path, "Sheet1", "A1:C3", None, true, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_range() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "filter.xlsx");
+        setup_test_data(&file_path);
+
+        let result = filter(&file_path, "Sheet1", "A1:C3", "A", "1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_range_style() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "style.xlsx");
+
+        let opts = RangeStyleOpts {
+            bold: true,
+            italic: false,
+            ..Default::default()
+        };
+
+        let result = range_style(&file_path, "Sheet1", "A1:B2", opts, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_range_border() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "border.xlsx");
+
+        let opts = RangeBorderOpts {
+            all: true,
+            style: "thin".to_string(),
+            ..Default::default()
+        };
+
+        let result = range_border(&file_path, "Sheet1", "A1:B2", opts, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_compare_cell_values() {
+        // Numbers
+        assert_eq!(
+            compare_cell_values(&CellValue::Number(1.0), &CellValue::Number(2.0)),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            compare_cell_values(&CellValue::Number(2.0), &CellValue::Number(1.0)),
+            std::cmp::Ordering::Greater
+        );
+
+        // Empty values go last
+        assert_eq!(
+            compare_cell_values(&CellValue::Empty, &CellValue::Number(1.0)),
+            std::cmp::Ordering::Greater
+        );
+
+        // Strings
+        assert_eq!(
+            compare_cell_values(
+                &CellValue::String("a".to_string()),
+                &CellValue::String("b".to_string())
+            ),
+            std::cmp::Ordering::Less
+        );
+    }
+
+    #[test]
+    fn test_dry_run_operations() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        // All these should succeed without modifying the file
+        assert!(copy(&file_path, "Sheet1", "A1:B2", "E1", &global).is_ok());
+        assert!(move_range(&file_path, "Sheet1", "A1:B2", "E1", &global).is_ok());
+        assert!(clear(&file_path, "Sheet1", "A1:B2", false, &global).is_ok());
+        assert!(fill(&file_path, "Sheet1", "A1:B2", "test", &global).is_ok());
+        assert!(merge(&file_path, "Sheet1", "A1:B2", &global).is_ok());
+        assert!(unmerge(&file_path, "Sheet1", "A1:B2", &global).is_ok());
+    }
+
+    // Additional tests for better coverage
+
+    #[test]
+    fn test_run_get_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_get.xlsx");
+        setup_test_data(&file_path);
+
+        let args = RangeArgs {
+            command: RangeCommand::Get {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1:C3".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_copy_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_copy.xlsx");
+        setup_test_data(&file_path);
+
+        let args = RangeArgs {
+            command: RangeCommand::Copy {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                source: "A1:B2".to_string(),
+                dest: "E1".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_move_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_move.xlsx");
+        setup_test_data(&file_path);
+
+        let args = RangeArgs {
+            command: RangeCommand::Move {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                source: "A1:B2".to_string(),
+                dest: "E1".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_clear_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_clear.xlsx");
+        setup_test_data(&file_path);
+
+        let args = RangeArgs {
+            command: RangeCommand::Clear {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1:B2".to_string(),
+                values_only: false,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_fill_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_fill.xlsx");
+
+        let args = RangeArgs {
+            command: RangeCommand::Fill {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1:B2".to_string(),
+                value: "test".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_merge_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_merge.xlsx");
+
+        let args = RangeArgs {
+            command: RangeCommand::Merge {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1:B2".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_unmerge_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_unmerge.xlsx");
+
+        merge(&file_path, "Sheet1", "A1:B2", &default_global()).unwrap();
+
+        let args = RangeArgs {
+            command: RangeCommand::Unmerge {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1:B2".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_copy_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "copy_json.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = copy(&file_path, "Sheet1", "A1:B2", "E1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_move_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "move_json.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = move_range(&file_path, "Sheet1", "A1:B2", "E1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clear_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear_json.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = clear(&file_path, "Sheet1", "A1:B2", false, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_fill_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "fill_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = fill(&file_path, "Sheet1", "A1:B2", "test", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_merge_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "merge_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = merge(&file_path, "Sheet1", "A1:B2", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_names_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "names_json.xlsx");
+
+        name(&file_path, "MyRange", "A1:A10", None, &default_global()).unwrap();
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = names(&file_path, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "validate_json.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = validate(&file_path, "Sheet1", "A1:C3", "nonempty", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sort_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "sort_json.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = sort(&file_path, "Sheet1", "A1:C3", None, false, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_filter_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "filter_json.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = filter(&file_path, "Sheet1", "A1:C3", "A", "1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clear_with_styles() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear_styles.xlsx");
+        setup_test_data(&file_path);
+
+        let result = clear(&file_path, "Sheet1", "A1:B2", true, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_fill_number_value() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "fill_num.xlsx");
+
+        let result = fill(&file_path, "Sheet1", "A1:C3", "123", &default_global());
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = xlex_core::CellRef::new(1, 1);
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        assert_eq!(value, CellValue::Number(123.0));
+    }
+
+    #[test]
+    fn test_sort_with_column() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "sort_col.xlsx");
+        setup_test_data(&file_path);
+
+        let result = sort(
+            &file_path,
+            "Sheet1",
+            "A1:C3",
+            Some("B"),
+            false,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+    }
+
+    // More coverage tests for run commands
+
+    #[test]
+    fn test_run_style_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_style.xlsx");
+        setup_test_data(&file_path);
+
+        let args = RangeArgs {
+            command: RangeCommand::Style {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1:B2".to_string(),
+                bold: true,
+                italic: true,
+                underline: false,
+                font: Some("Arial".to_string()),
+                font_size: Some(12.0),
+                color: Some("FF0000".to_string()),
+                bg_color: Some("FFFF00".to_string()),
+                align: Some("center".to_string()),
+                valign: Some("middle".to_string()),
+                wrap: true,
+                number_format: None,
+                percent: false,
+                currency: None,
+                date_format: None,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_border_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_border.xlsx");
+
+        let args = RangeArgs {
+            command: RangeCommand::Border {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1:B2".to_string(),
+                all: true,
+                outline: false,
+                top: false,
+                bottom: false,
+                left: false,
+                right: false,
+                none: false,
+                style: "thin".to_string(),
+                border_color: Some("000000".to_string()),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_name_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_name.xlsx");
+
+        let args = RangeArgs {
+            command: RangeCommand::Name {
+                file: file_path,
+                name: "TestRange".to_string(),
+                range: "A1:B10".to_string(),
+                sheet: None,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_names_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_names.xlsx");
+
+        // Add a named range first
+        name(&file_path, "MyRange", "A1:A10", None, &default_global()).unwrap();
+
+        let args = RangeArgs {
+            command: RangeCommand::Names { file: file_path },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_validate_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_validate.xlsx");
+        setup_test_data(&file_path);
+
+        let args = RangeArgs {
+            command: RangeCommand::Validate {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1:C3".to_string(),
+                rule: "nonempty".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_sort_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_sort.xlsx");
+        setup_test_data(&file_path);
+
+        let args = RangeArgs {
+            command: RangeCommand::Sort {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1:C3".to_string(),
+                column: None,
+                descending: false,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_filter_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_filter.xlsx");
+        setup_test_data(&file_path);
+
+        let args = RangeArgs {
+            command: RangeCommand::Filter {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1:C3".to_string(),
+                column: "A".to_string(),
+                value: "1".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    // Verbose output tests
+
+    #[test]
+    fn test_copy_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "copy_verbose.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.verbose = true;
+        global.quiet = false;
+
+        let result = copy(&file_path, "Sheet1", "A1:B2", "E1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_move_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "move_verbose.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.verbose = true;
+        global.quiet = false;
+
+        let result = move_range(&file_path, "Sheet1", "A1:B2", "E1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clear_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear_verbose.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.verbose = true;
+        global.quiet = false;
+
+        let result = clear(&file_path, "Sheet1", "A1:B2", false, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_fill_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "fill_verbose.xlsx");
+
+        let mut global = default_global();
+        global.verbose = true;
+        global.quiet = false;
+
+        let result = fill(&file_path, "Sheet1", "A1:B2", "test", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_merge_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "merge_verbose.xlsx");
+
+        let mut global = default_global();
+        global.verbose = true;
+        global.quiet = false;
+
+        let result = merge(&file_path, "Sheet1", "A1:B2", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_unmerge_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "unmerge_verbose.xlsx");
+
+        merge(&file_path, "Sheet1", "A1:B2", &default_global()).unwrap();
+
+        let mut global = default_global();
+        global.verbose = true;
+        global.quiet = false;
+
+        let result = unmerge(&file_path, "Sheet1", "A1:B2", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_name_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "name_verbose.xlsx");
+
+        let mut global = default_global();
+        global.verbose = true;
+        global.quiet = false;
+
+        let result = name(&file_path, "TestRange", "A1:B10", None, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sort_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "sort_verbose.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.verbose = true;
+        global.quiet = false;
+
+        let result = sort(&file_path, "Sheet1", "A1:C3", None, false, &global);
+        assert!(result.is_ok());
+    }
+
+    // Dry run tests for more operations
+
+    #[test]
+    fn test_name_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "name_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = name(&file_path, "TestRange", "A1:B10", None, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sort_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "sort_dry.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = sort(&file_path, "Sheet1", "A1:C3", None, false, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_range_style_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "style_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let opts = RangeStyleOpts {
+            bold: true,
+            ..Default::default()
+        };
+
+        let result = range_style(&file_path, "Sheet1", "A1:B2", opts, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_range_border_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "border_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let opts = RangeBorderOpts {
+            all: true,
+            style: "thin".to_string(),
+            ..Default::default()
+        };
+
+        let result = range_border(&file_path, "Sheet1", "A1:B2", opts, &global);
+        assert!(result.is_ok());
+    }
+
+    // Edge cases and error handling
+
+    #[test]
+    fn test_validate_unknown_rule() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "validate_err.xlsx");
+        setup_test_data(&file_path);
+
+        let result = validate(
+            &file_path,
+            "Sheet1",
+            "A1:C3",
+            "unknown_rule",
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_filter_invalid_column() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "filter_col_err.xlsx");
+        setup_test_data(&file_path);
+
+        // Column Z is outside A1:C3 range
+        let result = filter(&file_path, "Sheet1", "A1:C3", "Z", "1", &default_global());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sort_invalid_column() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "sort_col_err.xlsx");
+        setup_test_data(&file_path);
+
+        // Column Z is outside A1:C3 range
+        let result = sort(
+            &file_path,
+            "Sheet1",
+            "A1:C3",
+            Some("Z"),
+            false,
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_no_sheet.xlsx");
+
+        let result = get(&file_path, "NonExistentSheet", "A1:C3", &default_global());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_copy_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "copy_no_sheet.xlsx");
+
+        let result = copy(
+            &file_path,
+            "NonExistentSheet",
+            "A1:B2",
+            "E1",
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_move_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "move_no_sheet.xlsx");
+
+        let result = move_range(
+            &file_path,
+            "NonExistentSheet",
+            "A1:B2",
+            "E1",
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_clear_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear_no_sheet.xlsx");
+
+        let result = clear(
+            &file_path,
+            "NonExistentSheet",
+            "A1:B2",
+            false,
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_merge_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "merge_no_sheet.xlsx");
+
+        let result = merge(&file_path, "NonExistentSheet", "A1:B2", &default_global());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "validate_no_sheet.xlsx");
+
+        let result = validate(
+            &file_path,
+            "NonExistentSheet",
+            "A1:C3",
+            "nonempty",
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sort_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "sort_no_sheet.xlsx");
+
+        let result = sort(
+            &file_path,
+            "NonExistentSheet",
+            "A1:C3",
+            None,
+            false,
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_filter_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "filter_no_sheet.xlsx");
+
+        let result = filter(
+            &file_path,
+            "NonExistentSheet",
+            "A1:C3",
+            "A",
+            "1",
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_name_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "name_no_sheet.xlsx");
+
+        let result = name(
+            &file_path,
+            "TestRange",
+            "A1:B10",
+            Some("NonExistentSheet"),
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_range_style_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "style_no_sheet.xlsx");
+
+        let opts = RangeStyleOpts {
+            bold: true,
+            ..Default::default()
+        };
+
+        let result = range_style(
+            &file_path,
+            "NonExistentSheet",
+            "A1:B2",
+            opts,
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_range_border_sheet_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "border_no_sheet.xlsx");
+
+        let opts = RangeBorderOpts {
+            all: true,
+            style: "thin".to_string(),
+            ..Default::default()
+        };
+
+        let result = range_border(
+            &file_path,
+            "NonExistentSheet",
+            "A1:B2",
+            opts,
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    // Compare cell values edge cases
+
+    #[test]
+    fn test_compare_cell_values_booleans() {
+        assert_eq!(
+            compare_cell_values(&CellValue::Boolean(false), &CellValue::Boolean(true)),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            compare_cell_values(&CellValue::Boolean(true), &CellValue::Boolean(false)),
+            std::cmp::Ordering::Greater
+        );
+        assert_eq!(
+            compare_cell_values(&CellValue::Boolean(true), &CellValue::Boolean(true)),
+            std::cmp::Ordering::Equal
+        );
+    }
+
+    #[test]
+    fn test_compare_cell_values_mixed_types() {
+        // Numbers come before booleans
+        assert_eq!(
+            compare_cell_values(&CellValue::Number(1.0), &CellValue::Boolean(true)),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            compare_cell_values(&CellValue::Boolean(true), &CellValue::Number(1.0)),
+            std::cmp::Ordering::Greater
+        );
+
+        // Booleans come before strings
+        assert_eq!(
+            compare_cell_values(
+                &CellValue::Boolean(true),
+                &CellValue::String("test".to_string())
+            ),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            compare_cell_values(
+                &CellValue::String("test".to_string()),
+                &CellValue::Boolean(true)
+            ),
+            std::cmp::Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn test_compare_cell_values_equal_empty() {
+        assert_eq!(
+            compare_cell_values(&CellValue::Empty, &CellValue::Empty),
+            std::cmp::Ordering::Equal
+        );
+    }
+
+    // Range style various alignments
+
+    #[test]
+    fn test_range_style_alignments() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "style_align.xlsx");
+
+        // Test left alignment
+        let opts = RangeStyleOpts {
+            align: Some("left".to_string()),
+            ..Default::default()
+        };
+        let result = range_style(&file_path, "Sheet1", "A1", opts, &default_global());
+        assert!(result.is_ok());
+
+        // Test right alignment
+        let opts = RangeStyleOpts {
+            align: Some("right".to_string()),
+            ..Default::default()
+        };
+        let result = range_style(&file_path, "Sheet1", "B1", opts, &default_global());
+        assert!(result.is_ok());
+
+        // Test justify alignment
+        let opts = RangeStyleOpts {
+            align: Some("justify".to_string()),
+            ..Default::default()
+        };
+        let result = range_style(&file_path, "Sheet1", "C1", opts, &default_global());
+        assert!(result.is_ok());
+
+        // Test unknown alignment (defaults to General)
+        let opts = RangeStyleOpts {
+            align: Some("unknown".to_string()),
+            ..Default::default()
+        };
+        let result = range_style(&file_path, "Sheet1", "D1", opts, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_range_style_vertical_alignments() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "style_valign.xlsx");
+
+        // Test top alignment
+        let opts = RangeStyleOpts {
+            valign: Some("top".to_string()),
+            ..Default::default()
+        };
+        let result = range_style(&file_path, "Sheet1", "A1", opts, &default_global());
+        assert!(result.is_ok());
+
+        // Test center alignment
+        let opts = RangeStyleOpts {
+            valign: Some("center".to_string()),
+            ..Default::default()
+        };
+        let result = range_style(&file_path, "Sheet1", "B1", opts, &default_global());
+        assert!(result.is_ok());
+
+        // Test bottom alignment
+        let opts = RangeStyleOpts {
+            valign: Some("bottom".to_string()),
+            ..Default::default()
+        };
+        let result = range_style(&file_path, "Sheet1", "C1", opts, &default_global());
+        assert!(result.is_ok());
+
+        // Test unknown alignment (defaults to Center)
+        let opts = RangeStyleOpts {
+            valign: Some("unknown".to_string()),
+            ..Default::default()
+        };
+        let result = range_style(&file_path, "Sheet1", "D1", opts, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_range_style_number_formats() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "style_numfmt.xlsx");
+
+        // Test percent format
+        let opts = RangeStyleOpts {
+            percent: true,
+            ..Default::default()
+        };
+        let result = range_style(&file_path, "Sheet1", "A1", opts, &default_global());
+        assert!(result.is_ok());
+
+        // Test currency format
+        let opts = RangeStyleOpts {
+            currency: Some("USD".to_string()),
+            ..Default::default()
+        };
+        let result = range_style(&file_path, "Sheet1", "B1", opts, &default_global());
+        assert!(result.is_ok());
+
+        // Test date format
+        let opts = RangeStyleOpts {
+            date_format: Some("YYYY-MM-DD".to_string()),
+            ..Default::default()
+        };
+        let result = range_style(&file_path, "Sheet1", "C1", opts, &default_global());
+        assert!(result.is_ok());
+
+        // Test custom number format
+        let opts = RangeStyleOpts {
+            number_format: Some("#,##0.00".to_string()),
+            ..Default::default()
+        };
+        let result = range_style(&file_path, "Sheet1", "D1", opts, &default_global());
+        assert!(result.is_ok());
+    }
+
+    // Range border various styles
+
+    #[test]
+    fn test_range_border_styles() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "border_styles.xlsx");
+
+        let styles = [
+            "thin", "medium", "thick", "dashed", "dotted", "double", "hair", "unknown",
+        ];
+        for (i, style) in styles.iter().enumerate() {
+            let opts = RangeBorderOpts {
+                all: true,
+                style: style.to_string(),
+                ..Default::default()
+            };
+            let range = format!("A{}:B{}", i + 1, i + 1);
+            let result = range_border(&file_path, "Sheet1", &range, opts, &default_global());
+            assert!(result.is_ok());
+        }
+    }
+
+    #[test]
+    fn test_range_border_outline() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "border_outline.xlsx");
+
+        let opts = RangeBorderOpts {
+            outline: true,
+            style: "medium".to_string(),
+            ..Default::default()
+        };
+
+        let result = range_border(&file_path, "Sheet1", "A1:C3", opts, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_range_border_individual() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "border_individual.xlsx");
+
+        let opts = RangeBorderOpts {
+            top: true,
+            bottom: true,
+            left: true,
+            right: true,
+            style: "thin".to_string(),
+            ..Default::default()
+        };
+
+        let result = range_border(&file_path, "Sheet1", "A1:C3", opts, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_range_border_remove() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "border_remove.xlsx");
+
+        // First add borders
+        let add_opts = RangeBorderOpts {
+            all: true,
+            style: "thin".to_string(),
+            ..Default::default()
+        };
+        range_border(&file_path, "Sheet1", "A1:C3", add_opts, &default_global()).unwrap();
+
+        // Then remove borders
+        let remove_opts = RangeBorderOpts {
+            none: true,
+            style: "thin".to_string(),
+            ..Default::default()
+        };
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = range_border(&file_path, "Sheet1", "A1:C3", remove_opts, &global);
+        assert!(result.is_ok());
+    }
+
+    // Names list with various states
+
+    #[test]
+    fn test_names_empty() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "names_empty.xlsx");
+
+        let result = names(&file_path, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_name_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "name_json_out.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = name(&file_path, "TestRange", "A1:B10", None, &global);
+        assert!(result.is_ok());
+    }
+
+    // Validation edge cases
+
+    #[test]
+    fn test_validate_nonempty_fails() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "validate_fail.xlsx");
+
+        // Don't set up test data, so cells are empty
+        let result = validate(&file_path, "Sheet1", "A1:C3", "nonempty", &default_global());
+        assert!(result.is_ok()); // Should succeed but report validation failures
+    }
+
+    #[test]
+    fn test_validate_numeric_fails() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "validate_num_fail.xlsx");
+
+        // Set string values
+        {
+            let mut wb = Workbook::open(&file_path).unwrap();
+            wb.set_cell(
+                "Sheet1",
+                xlex_core::CellRef::new(1, 1),
+                CellValue::String("text".to_string()),
+            )
+            .unwrap();
+            wb.save().unwrap();
+        }
+
+        let result = validate(&file_path, "Sheet1", "A1:A1", "numeric", &default_global());
+        assert!(result.is_ok()); // Should succeed but report validation failures
+    }
+
+    // Get with text output verbose
+
+    #[test]
+    fn test_get_range_text_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_text.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = get(&file_path, "Sheet1", "A1:C3", &global);
+        assert!(result.is_ok());
+    }
+
+    // Filter verbose output
+
+    #[test]
+    fn test_filter_text_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "filter_text.xlsx");
+        setup_test_data(&file_path);
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = filter(&file_path, "Sheet1", "A1:C3", "A", "1", &global);
+        assert!(result.is_ok());
+    }
+}

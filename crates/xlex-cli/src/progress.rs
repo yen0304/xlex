@@ -192,4 +192,104 @@ mod tests {
         spinner.tick();
         bar.inc(10);
     }
+
+    #[test]
+    fn test_progress_set_message() {
+        let progress = Progress::spinner("Initial", true);
+        progress.set_message("Updated");
+        assert!(progress.is_quiet());
+    }
+
+    #[test]
+    fn test_progress_set_position() {
+        let progress = Progress::bar(100, "Test", true);
+        progress.set_position(50);
+        progress.inc(10);
+    }
+
+    #[test]
+    fn test_progress_set_length() {
+        let progress = Progress::bar(50, "Test", true);
+        progress.set_length(100);
+        progress.inc(25);
+    }
+
+    #[test]
+    fn test_progress_tick() {
+        let progress = Progress::spinner("Tick test", true);
+        progress.tick();
+        progress.tick();
+        progress.finish_with_message("Done");
+    }
+
+    #[test]
+    fn test_progress_finish_and_clear() {
+        let progress = Progress::spinner("Clear test", true);
+        progress.tick();
+        progress.finish_and_clear();
+    }
+
+    #[test]
+    fn test_progress_abandon_with_message() {
+        let progress = Progress::bar(100, "Abandon test", true);
+        progress.inc(30);
+        progress.abandon_with_message("Failed");
+    }
+
+    #[test]
+    fn test_progress_kind_spinner() {
+        let progress = Progress::new(ProgressKind::Spinner, "Spinner", true);
+        progress.tick();
+        assert!(progress.is_quiet());
+    }
+
+    #[test]
+    fn test_progress_kind_bar() {
+        let progress = Progress::new(ProgressKind::Bar { total: 100 }, "Bar", true);
+        progress.inc(50);
+        assert!(progress.is_quiet());
+    }
+
+    #[test]
+    fn test_multi_progress_quiet() {
+        let multi = MultiProgress::new(true);
+        let spinner = multi.add_spinner("Test");
+        assert!(spinner.is_quiet());
+    }
+
+    #[test]
+    fn test_multi_progress_bar_operations() {
+        let multi = MultiProgress::new(true);
+        let bar = multi.add_bar(50, "Test bar");
+        bar.set_position(25);
+        bar.set_length(100);
+        bar.inc(10);
+        bar.finish_with_message("Complete");
+    }
+
+    #[test]
+    fn test_spinner_non_quiet() {
+        // Test non-quiet mode (still creates progress bar but visible)
+        let progress = Progress::spinner("Visible", false);
+        assert!(!progress.is_quiet());
+        progress.finish_and_clear();
+    }
+
+    #[test]
+    fn test_bar_non_quiet() {
+        let progress = Progress::bar(100, "Visible bar", false);
+        assert!(!progress.is_quiet());
+        progress.finish_and_clear();
+    }
+
+    #[test]
+    fn test_multi_progress_non_quiet() {
+        let multi = MultiProgress::new(false);
+        let spinner = multi.add_spinner("Visible spinner");
+        let bar = multi.add_bar(100, "Visible bar");
+        assert!(!spinner.is_quiet());
+        assert!(!bar.is_quiet());
+        spinner.finish_and_clear();
+        bar.finish_and_clear();
+    }
 }

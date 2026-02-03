@@ -1106,3 +1106,573 @@ fn detect_cycle(
     path.pop();
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn default_global() -> GlobalOptions {
+        GlobalOptions {
+            quiet: true,
+            verbose: false,
+            format: OutputFormat::Text,
+            no_color: true,
+            color: false,
+            json_errors: false,
+            dry_run: false,
+            output: None,
+        }
+    }
+
+    fn create_test_workbook(dir: &TempDir, name: &str) -> std::path::PathBuf {
+        let file_path = dir.path().join(name);
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+        file_path
+    }
+
+    fn setup_formula_data(file: &std::path::Path) {
+        let mut wb = Workbook::open(file).unwrap();
+        // Set some values
+        wb.set_cell("Sheet1", CellRef::new(1, 1), CellValue::Number(10.0))
+            .unwrap();
+        wb.set_cell("Sheet1", CellRef::new(2, 1), CellValue::Number(20.0))
+            .unwrap();
+        wb.set_cell("Sheet1", CellRef::new(3, 1), CellValue::Number(30.0))
+            .unwrap();
+        // Set a formula
+        wb.set_cell(
+            "Sheet1",
+            CellRef::new(1, 2),
+            CellValue::formula("SUM(A1:C1)"),
+        )
+        .unwrap();
+        wb.save().unwrap();
+    }
+
+    #[test]
+    fn test_get_formula() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = get(&file_path, "Sheet1", "A2", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_non_formula() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_non.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = get(&file_path, "Sheet1", "A1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_formula() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set.xlsx");
+
+        let result = set(&file_path, "Sheet1", "A1", "SUM(B1:B10)", &default_global());
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = CellRef::parse("A1").unwrap();
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        match value {
+            CellValue::Formula { formula, .. } => {
+                assert_eq!(formula, "SUM(B1:B10)");
+            }
+            _ => panic!("Expected formula"),
+        }
+    }
+
+    #[test]
+    fn test_set_formula_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = set(&file_path, "Sheet1", "A1", "SUM(B1:B10)", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_list_formulas() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "list.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = list(&file_path, "Sheet1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_formulas() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "check.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = check(&file_path, Some("Sheet1"), &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_all_sheets() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "check_all.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = check(&file_path, None, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_valid_formula() {
+        let result = validate("SUM(A1:A10)", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_with_equals() {
+        let result = validate("=SUM(A1:A10)", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_invalid_formula() {
+        let result = validate("SUM(A1:A10", &default_global());
+        assert!(result.is_err()); // Missing closing paren
+    }
+
+    #[test]
+    fn test_stats() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "stats.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = stats(&file_path, Some("Sheet1"), &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_refs() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "refs.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = refs(&file_path, "Sheet1", "A2", false, true, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_replace_formula() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "replace.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = replace_formula(&file_path, "Sheet1", "A1", "A2", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_calc_sum() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "sum.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = calc_sum(&file_path, "Sheet1", "A1:C1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_calc_avg() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "avg.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = calc_avg(&file_path, "Sheet1", "A1:C1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_calc_count() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "count.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = calc_count(&file_path, "Sheet1", "A1:C1", false, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_calc_count_nonempty() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "count_ne.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = calc_count(&file_path, "Sheet1", "A1:C1", true, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_calc_min() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "min.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = calc_min(&file_path, "Sheet1", "A1:C1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_calc_max() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "max.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = calc_max(&file_path, "Sheet1", "A1:C1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_circular_detection() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "circular.xlsx");
+
+        let result = circular(&file_path, Some("Sheet1"), &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_extract_cell_refs() {
+        let refs = extract_cell_refs("SUM(A1:B10)");
+        assert!(refs.contains(&"A1".to_string()));
+        assert!(refs.contains(&"B10".to_string()));
+    }
+
+    #[test]
+    fn test_extract_cell_refs_single() {
+        let refs = extract_cell_refs("A1+B1");
+        assert!(refs.contains(&"A1".to_string()));
+        assert!(refs.contains(&"B1".to_string()));
+    }
+
+    // Additional tests for better coverage
+
+    #[test]
+    fn test_run_get_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_get.xlsx");
+        setup_formula_data(&file_path);
+
+        let args = FormulaArgs {
+            command: FormulaCommand::Get {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                cell: "A2".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_set_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_set.xlsx");
+
+        let args = FormulaArgs {
+            command: FormulaCommand::Set {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                cell: "A1".to_string(),
+                formula: "SUM(B1:B10)".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_list_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_list.xlsx");
+        setup_formula_data(&file_path);
+
+        let args = FormulaArgs {
+            command: FormulaCommand::List {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_check_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_check.xlsx");
+        setup_formula_data(&file_path);
+
+        let args = FormulaArgs {
+            command: FormulaCommand::Check {
+                file: file_path,
+                sheet: Some("Sheet1".to_string()),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_validate_command() {
+        let args = FormulaArgs {
+            command: FormulaCommand::Validate {
+                formula: "SUM(A1:A10)".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_stats_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_stats.xlsx");
+        setup_formula_data(&file_path);
+
+        let args = FormulaArgs {
+            command: FormulaCommand::Stats {
+                file: file_path,
+                sheet: Some("Sheet1".to_string()),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_refs_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_refs.xlsx");
+        setup_formula_data(&file_path);
+
+        let args = FormulaArgs {
+            command: FormulaCommand::Refs {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                cell: "A2".to_string(),
+                dependents: false,
+                precedents: true,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_replace_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_replace.xlsx");
+        setup_formula_data(&file_path);
+
+        let args = FormulaArgs {
+            command: FormulaCommand::Replace {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                find: "A1".to_string(),
+                replace: "A2".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_circular_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_circular.xlsx");
+        setup_formula_data(&file_path);
+
+        let args = FormulaArgs {
+            command: FormulaCommand::Circular {
+                file: file_path,
+                sheet: Some("Sheet1".to_string()),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_formula_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_json.xlsx");
+        setup_formula_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = get(&file_path, "Sheet1", "A2", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_list_formulas_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "list_json.xlsx");
+        setup_formula_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = list(&file_path, "Sheet1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_stats_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "stats_json.xlsx");
+        setup_formula_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = stats(&file_path, Some("Sheet1"), &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_refs_dependents() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "refs_dep.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = refs(&file_path, "Sheet1", "A1", true, false, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_refs_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "refs_json.xlsx");
+        setup_formula_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = refs(&file_path, "Sheet1", "A2", false, true, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_calc_sum_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "sum_json.xlsx");
+        setup_formula_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = calc_sum(&file_path, "Sheet1", "A1:C1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "check_json.xlsx");
+        setup_formula_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = check(&file_path, Some("Sheet1"), &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_json() {
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = validate("SUM(A1:A10)", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_circular_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "circular_json.xlsx");
+        setup_formula_data(&file_path);
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = circular(&file_path, Some("Sheet1"), &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_replace_formula_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "replace_dry.xlsx");
+        setup_formula_data(&file_path);
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = replace_formula(&file_path, "Sheet1", "A1", "A2", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_formula_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = set(&file_path, "Sheet1", "A1", "SUM(B1:B10)", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_stats_all_sheets() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "stats_all.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = stats(&file_path, None, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_circular_all_sheets() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "circular_all.xlsx");
+        setup_formula_data(&file_path);
+
+        let result = circular(&file_path, None, &default_global());
+        assert!(result.is_ok());
+    }
+}

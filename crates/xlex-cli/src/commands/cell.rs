@@ -775,3 +775,1351 @@ pub fn parse_auto_value(value: &str) -> CellValue {
     // Default to string
     CellValue::String(value.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn default_global() -> GlobalOptions {
+        GlobalOptions {
+            quiet: true,
+            verbose: false,
+            format: OutputFormat::Text,
+            no_color: true,
+            color: false,
+            json_errors: false,
+            dry_run: false,
+            output: None,
+        }
+    }
+
+    fn create_test_workbook(dir: &TempDir, name: &str) -> std::path::PathBuf {
+        let file_path = dir.path().join(name);
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+        file_path
+    }
+
+    #[test]
+    fn test_parse_auto_value_formula() {
+        let value = parse_auto_value("=SUM(A1:A10)");
+        match value {
+            CellValue::Formula { formula, .. } => {
+                assert_eq!(formula, "SUM(A1:A10)");
+            }
+            _ => panic!("Expected Formula"),
+        }
+    }
+
+    #[test]
+    fn test_parse_auto_value_boolean_true() {
+        assert_eq!(parse_auto_value("true"), CellValue::Boolean(true));
+        assert_eq!(parse_auto_value("TRUE"), CellValue::Boolean(true));
+        assert_eq!(parse_auto_value("True"), CellValue::Boolean(true));
+    }
+
+    #[test]
+    fn test_parse_auto_value_boolean_false() {
+        assert_eq!(parse_auto_value("false"), CellValue::Boolean(false));
+        assert_eq!(parse_auto_value("FALSE"), CellValue::Boolean(false));
+        assert_eq!(parse_auto_value("False"), CellValue::Boolean(false));
+    }
+
+    #[test]
+    fn test_parse_auto_value_number() {
+        assert_eq!(parse_auto_value("42"), CellValue::Number(42.0));
+        assert_eq!(parse_auto_value("3.14"), CellValue::Number(3.14));
+        assert_eq!(parse_auto_value("-100"), CellValue::Number(-100.0));
+    }
+
+    #[test]
+    fn test_parse_auto_value_string() {
+        assert_eq!(
+            parse_auto_value("Hello"),
+            CellValue::String("Hello".to_string())
+        );
+        assert_eq!(
+            parse_auto_value("not a number"),
+            CellValue::String("not a number".to_string())
+        );
+    }
+
+    #[test]
+    fn test_get_cell() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get.xlsx");
+
+        // Set a value first
+        {
+            let mut wb = Workbook::open(&file_path).unwrap();
+            let cell_ref = CellRef::parse("A1").unwrap();
+            wb.set_cell("Sheet1", cell_ref, CellValue::String("Test".to_string()))
+                .unwrap();
+            wb.save().unwrap();
+        }
+
+        let result = get(&file_path, "Sheet1", "A1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_cell_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = get(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_cell() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set.xlsx");
+
+        let result = set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "Hello",
+            ValueType::String,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = CellRef::parse("A1").unwrap();
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        assert_eq!(value, CellValue::String("Hello".to_string()));
+    }
+
+    #[test]
+    fn test_set_cell_number() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set_num.xlsx");
+
+        let result = set(
+            &file_path,
+            "Sheet1",
+            "B2",
+            "42",
+            ValueType::Number,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = CellRef::parse("B2").unwrap();
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        assert_eq!(value, CellValue::Number(42.0));
+    }
+
+    #[test]
+    fn test_set_cell_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "Value",
+            ValueType::Auto,
+            &global,
+        );
+        assert!(result.is_ok());
+
+        // Cell should be empty
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = CellRef::parse("A1").unwrap();
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        assert_eq!(value, CellValue::Empty);
+    }
+
+    #[test]
+    fn test_set_formula() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "formula.xlsx");
+
+        let result = set_formula(&file_path, "Sheet1", "A1", "SUM(B1:B10)", &default_global());
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = CellRef::parse("A1").unwrap();
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        match value {
+            CellValue::Formula { formula, .. } => {
+                assert_eq!(formula, "SUM(B1:B10)");
+            }
+            _ => panic!("Expected formula"),
+        }
+    }
+
+    #[test]
+    fn test_set_formula_with_equals() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "formula_eq.xlsx");
+
+        let result = set_formula(&file_path, "Sheet1", "A1", "=A1+B1", &default_global());
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = CellRef::parse("A1").unwrap();
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        match value {
+            CellValue::Formula { formula, .. } => {
+                assert_eq!(formula, "A1+B1"); // Equals should be stripped
+            }
+            _ => panic!("Expected formula"),
+        }
+    }
+
+    #[test]
+    fn test_clear_cell() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear.xlsx");
+
+        // Set a value first
+        set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "ToDelete",
+            ValueType::String,
+            &default_global(),
+        )
+        .unwrap();
+
+        let result = clear(&file_path, "Sheet1", "A1", &default_global());
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = CellRef::parse("A1").unwrap();
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        assert_eq!(value, CellValue::Empty);
+    }
+
+    #[test]
+    fn test_get_type() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "type.xlsx");
+
+        set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "42",
+            ValueType::Number,
+            &default_global(),
+        )
+        .unwrap();
+
+        let result = get_type(&file_path, "Sheet1", "A1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_comment_get() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "comment_get.xlsx");
+
+        let result = comment_get(&file_path, "Sheet1", "A1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_comment_set() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "comment_set.xlsx");
+
+        let result = comment_set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "This is a comment",
+            None,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_comment_remove() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "comment_rm.xlsx");
+
+        // Set a comment first
+        comment_set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "Comment",
+            None,
+            &default_global(),
+        )
+        .unwrap();
+
+        let result = comment_remove(&file_path, "Sheet1", "A1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_comment_list() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "comment_list.xlsx");
+
+        let result = comment_list(&file_path, "Sheet1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_link_get() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "link_get.xlsx");
+
+        let result = link_get(&file_path, "Sheet1", "A1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_link_set() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "link_set.xlsx");
+
+        let result = link_set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "https://example.com",
+            None,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_link_remove() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "link_rm.xlsx");
+
+        // Set a link first
+        link_set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "https://example.com",
+            None,
+            &default_global(),
+        )
+        .unwrap();
+
+        let result = link_remove(&file_path, "Sheet1", "A1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    // Additional tests for better coverage
+
+    #[test]
+    fn test_set_cell_boolean() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set_bool.xlsx");
+
+        let result = set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "true",
+            ValueType::Boolean,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = CellRef::parse("A1").unwrap();
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        assert_eq!(value, CellValue::Boolean(true));
+    }
+
+    #[test]
+    fn test_set_cell_boolean_yes() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set_bool_yes.xlsx");
+
+        let result = set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "yes",
+            ValueType::Boolean,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = CellRef::parse("A1").unwrap();
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        assert_eq!(value, CellValue::Boolean(true));
+    }
+
+    #[test]
+    fn test_set_cell_formula_type() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set_formula_type.xlsx");
+
+        let result = set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "SUM(A2:A10)",
+            ValueType::Formula,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = CellRef::parse("A1").unwrap();
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        match value {
+            CellValue::Formula { formula, .. } => {
+                assert_eq!(formula, "SUM(A2:A10)");
+            }
+            _ => panic!("Expected formula"),
+        }
+    }
+
+    #[test]
+    fn test_set_cell_auto_number() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set_auto_num.xlsx");
+
+        let result = set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "123.45",
+            ValueType::Auto,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&file_path).unwrap();
+        let cell_ref = CellRef::parse("A1").unwrap();
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        assert_eq!(value, CellValue::Number(123.45));
+    }
+
+    #[test]
+    fn test_set_number_invalid() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set_num_inv.xlsx");
+
+        let result = set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "not_a_number",
+            ValueType::Number,
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_set_cell_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = set(&file_path, "Sheet1", "A1", "Test", ValueType::Auto, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_formula_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "formula_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = set_formula(&file_path, "Sheet1", "A1", "SUM(A1:A10)", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_formula_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "formula_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = set_formula(&file_path, "Sheet1", "A1", "A1+B1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clear_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = clear(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clear_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let result = clear(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_type_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "type_json.xlsx");
+
+        set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "42",
+            ValueType::Number,
+            &default_global(),
+        )
+        .unwrap();
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = get_type(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_comment_set_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "comment_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = comment_set(&file_path, "Sheet1", "A1", "Test", None, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_comment_remove_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "comment_rm_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = comment_remove(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_comment_list_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "comment_list_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = comment_list(&file_path, "Sheet1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_comment_get_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "comment_get_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = comment_get(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_link_set_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "link_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = link_set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "https://example.com",
+            None,
+            &global,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_link_remove_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "link_rm_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = link_remove(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_link_get_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "link_get_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = link_get(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_get_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_get.xlsx");
+
+        let args = CellArgs {
+            command: CellCommand::Get {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                cell: "A1".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_set_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_set.xlsx");
+
+        let args = CellArgs {
+            command: CellCommand::Set {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                cell: "A1".to_string(),
+                value: "Test".to_string(),
+                value_type: ValueType::Auto,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_formula_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_formula.xlsx");
+
+        let args = CellArgs {
+            command: CellCommand::Formula {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                cell: "A1".to_string(),
+                formula: "SUM(B1:B10)".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_clear_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_clear.xlsx");
+
+        let args = CellArgs {
+            command: CellCommand::Clear {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                cell: "A1".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_type_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_type.xlsx");
+
+        let args = CellArgs {
+            command: CellCommand::Type {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                cell: "A1".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_auto_value_empty() {
+        assert_eq!(parse_auto_value(""), CellValue::String("".to_string()));
+    }
+
+    #[test]
+    fn test_parse_auto_value_negative_decimal() {
+        assert_eq!(parse_auto_value("-3.14"), CellValue::Number(-3.14));
+    }
+
+    #[test]
+    fn test_get_cell_with_number() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_num.xlsx");
+
+        {
+            let mut wb = Workbook::open(&file_path).unwrap();
+            let cell_ref = CellRef::parse("A1").unwrap();
+            wb.set_cell("Sheet1", cell_ref, CellValue::Number(42.5))
+                .unwrap();
+            wb.save().unwrap();
+        }
+
+        let result = get(&file_path, "Sheet1", "A1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_cell_with_boolean() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_bool.xlsx");
+
+        {
+            let mut wb = Workbook::open(&file_path).unwrap();
+            let cell_ref = CellRef::parse("A1").unwrap();
+            wb.set_cell("Sheet1", cell_ref, CellValue::Boolean(true))
+                .unwrap();
+            wb.save().unwrap();
+        }
+
+        let result = get(&file_path, "Sheet1", "A1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_cell_with_formula() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_formula.xlsx");
+
+        {
+            let mut wb = Workbook::open(&file_path).unwrap();
+            let cell_ref = CellRef::parse("A1").unwrap();
+            wb.set_cell("Sheet1", cell_ref, CellValue::formula("SUM(B1:B10)"))
+                .unwrap();
+            wb.save().unwrap();
+        }
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = get(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_cell_empty() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_empty.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = get(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    // run command tests
+    #[test]
+    fn test_run_comment_get_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_comment_get.xlsx");
+
+        let args = CellArgs {
+            command: CellCommand::Comment(CommentArgs {
+                command: CommentCommand::Get {
+                    file: file_path,
+                    sheet: "Sheet1".to_string(),
+                    cell: "A1".to_string(),
+                },
+            }),
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_comment_set_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_comment_set.xlsx");
+
+        let args = CellArgs {
+            command: CellCommand::Comment(CommentArgs {
+                command: CommentCommand::Set {
+                    file: file_path,
+                    sheet: "Sheet1".to_string(),
+                    cell: "A1".to_string(),
+                    text: "Test comment".to_string(),
+                    author: Some("Author".to_string()),
+                },
+            }),
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_comment_remove_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_comment_rm.xlsx");
+
+        let args = CellArgs {
+            command: CellCommand::Comment(CommentArgs {
+                command: CommentCommand::Remove {
+                    file: file_path,
+                    sheet: "Sheet1".to_string(),
+                    cell: "A1".to_string(),
+                },
+            }),
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_comment_list_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_comment_list.xlsx");
+
+        let args = CellArgs {
+            command: CellCommand::Comment(CommentArgs {
+                command: CommentCommand::List {
+                    file: file_path,
+                    sheet: "Sheet1".to_string(),
+                },
+            }),
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_link_get_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_link_get.xlsx");
+
+        let args = CellArgs {
+            command: CellCommand::Link(LinkArgs {
+                command: LinkCommand::Get {
+                    file: file_path,
+                    sheet: "Sheet1".to_string(),
+                    cell: "A1".to_string(),
+                },
+            }),
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_link_set_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_link_set.xlsx");
+
+        let args = CellArgs {
+            command: CellCommand::Link(LinkArgs {
+                command: LinkCommand::Set {
+                    file: file_path,
+                    sheet: "Sheet1".to_string(),
+                    cell: "A1".to_string(),
+                    url: "https://example.com".to_string(),
+                    text: Some("Example".to_string()),
+                },
+            }),
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_link_remove_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_link_rm.xlsx");
+
+        let args = CellArgs {
+            command: CellCommand::Link(LinkArgs {
+                command: LinkCommand::Remove {
+                    file: file_path,
+                    sheet: "Sheet1".to_string(),
+                    cell: "A1".to_string(),
+                },
+            }),
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    // JSON output tests
+    #[test]
+    fn test_get_type_json_format() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "type_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = get_type(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_comment_get_json_format() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "comment_json2.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = comment_get(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_comment_list_json_format() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "comment_list_json2.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = comment_list(&file_path, "Sheet1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_link_get_json_format() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "link_json2.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = link_get(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    // Verbose output tests
+    #[test]
+    fn test_set_verbose_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set_verbose.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+        global.format = OutputFormat::Json;
+
+        let result = set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "Value",
+            ValueType::String,
+            &global,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_verbose_text() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set_verbose_txt.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+        global.format = OutputFormat::Text;
+
+        let result = set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "Value",
+            ValueType::String,
+            &global,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_formula_verbose_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "formula_verbose.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+        global.format = OutputFormat::Json;
+
+        let result = set_formula(&file_path, "Sheet1", "A1", "SUM(A1:A10)", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_formula_verbose_text() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "formula_verbose_txt.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+        global.format = OutputFormat::Text;
+
+        let result = set_formula(&file_path, "Sheet1", "A1", "SUM(A1:A10)", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clear_verbose_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear_verbose.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+        global.format = OutputFormat::Json;
+
+        let result = clear(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clear_verbose_text() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear_verbose_txt.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+        global.format = OutputFormat::Text;
+
+        let result = clear(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_comment_set_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "comment_verbose.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = comment_set(&file_path, "Sheet1", "A1", "Comment", None, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_comment_remove_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "comment_rm_verbose.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        // First set a comment
+        comment_set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "Comment",
+            None,
+            &default_global(),
+        )
+        .unwrap();
+
+        let result = comment_remove(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_comment_list_with_comments() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "comment_list_with.xlsx");
+
+        // Set a comment first
+        comment_set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "Comment",
+            None,
+            &default_global(),
+        )
+        .unwrap();
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = comment_list(&file_path, "Sheet1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_link_set_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "link_verbose.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = link_set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "https://example.com",
+            None,
+            &global,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_link_remove_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "link_rm_verbose.xlsx");
+
+        // First set a link
+        link_set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "https://example.com",
+            None,
+            &default_global(),
+        )
+        .unwrap();
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = link_remove(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_link_get_with_link() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "link_get_with.xlsx");
+
+        // First set a link
+        link_set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "https://example.com",
+            None,
+            &default_global(),
+        )
+        .unwrap();
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = link_get(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_comment_get_with_comment() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "comment_get_with.xlsx");
+
+        // First set a comment
+        comment_set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "Test Comment",
+            None,
+            &default_global(),
+        )
+        .unwrap();
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = comment_get(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_batch_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "batch_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = batch(&file_path, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_display_text_string() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_display.xlsx");
+
+        {
+            let mut wb = Workbook::open(&file_path).unwrap();
+            let cell_ref = CellRef::parse("A1").unwrap();
+            wb.set_cell(
+                "Sheet1",
+                cell_ref,
+                CellValue::String("Hello World".to_string()),
+            )
+            .unwrap();
+            wb.save().unwrap();
+        }
+
+        let mut global = default_global();
+        global.format = OutputFormat::Text;
+
+        let result = get(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_cell_error_invalid_number() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set_invalid_num.xlsx");
+
+        let result = set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "not_a_number",
+            ValueType::Number,
+            &default_global(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_set_cell_verbose_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "set_verbose.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "Test",
+            ValueType::String,
+            &global,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_formula_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "formula_verbose.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = set_formula(&file_path, "Sheet1", "A1", "A2+B2", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clear_cell_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear_verbose.xlsx");
+
+        // First set a value
+        set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "Value",
+            ValueType::String,
+            &default_global(),
+        )
+        .unwrap();
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = clear(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_type_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "type_verbose.xlsx");
+
+        set(
+            &file_path,
+            "Sheet1",
+            "A1",
+            "Hello",
+            ValueType::String,
+            &default_global(),
+        )
+        .unwrap();
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = get_type(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+}

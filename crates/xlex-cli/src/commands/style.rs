@@ -767,3 +767,1192 @@ fn run_preset(args: &PresetArgs, global: &GlobalOptions) -> Result<()> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn default_global() -> GlobalOptions {
+        GlobalOptions {
+            quiet: true,
+            verbose: false,
+            format: OutputFormat::Text,
+            no_color: true,
+            color: false,
+            json_errors: false,
+            dry_run: false,
+            output: None,
+        }
+    }
+
+    fn create_test_workbook(dir: &TempDir, name: &str) -> std::path::PathBuf {
+        let file_path = dir.path().join(name);
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+        file_path
+    }
+
+    #[test]
+    fn test_list_styles() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "styles.xlsx");
+
+        let result = list(&file_path, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_list_styles_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "styles_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = list(&file_path, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_style() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_style.xlsx");
+
+        // New workbook has empty style registry, so get(0) will fail
+        // This is expected behavior
+        let result = get(&file_path, 0, &default_global());
+        // StyleNotFound is expected for a new workbook
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_style_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_style_nf.xlsx");
+
+        let result = get(&file_path, 9999, &default_global());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_apply_style() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "apply.xlsx");
+
+        // Style 0 may not exist in a new workbook - that's expected
+        // The apply function will fail if the style doesn't exist
+        let result = apply(&file_path, "Sheet1", "A1", 0, &default_global());
+        // This may fail because style 0 doesn't exist - that's ok
+        // The important thing is the function runs without panic
+        let _ = result;
+    }
+
+    #[test]
+    fn test_apply_style_range() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "apply_range.xlsx");
+
+        // Style may not exist - the function should handle this gracefully
+        let result = apply(&file_path, "Sheet1", "A1:B2", 0, &default_global());
+        let _ = result;
+    }
+
+    #[test]
+    fn test_apply_style_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "apply_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = apply(&file_path, "Sheet1", "A1", 0, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_copy_style() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "copy.xlsx");
+
+        let result = copy(&file_path, "Sheet1", "A1", "B1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_copy_style_to_range() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "copy_range.xlsx");
+
+        let result = copy(&file_path, "Sheet1", "A1", "B1:C3", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clear_style() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear.xlsx");
+
+        let result = clear(&file_path, "Sheet1", "A1", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clear_style_range() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear_range.xlsx");
+
+        let result = clear(&file_path, "Sheet1", "A1:B2", &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_list() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: None,
+            list: true,
+            remove: false,
+            highlight_cells: false,
+            gt: None,
+            lt: None,
+            eq: None,
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: None,
+        };
+
+        let result = run_condition(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_freeze_show() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "freeze.xlsx");
+
+        let args = FreezeArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            rows: None,
+            cols: None,
+            at: None,
+            unfreeze: false,
+        };
+
+        let result = run_freeze(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_freeze_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "freeze_dry.xlsx");
+
+        let args = FreezeArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            rows: Some(1),
+            cols: Some(1),
+            at: None,
+            unfreeze: false,
+        };
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = run_freeze(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_preset_list() {
+        let args = PresetArgs {
+            command: PresetCommand::List,
+        };
+
+        let result = run_preset(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    // Additional tests for better coverage
+
+    #[test]
+    fn test_run_list_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_list.xlsx");
+
+        let args = StyleArgs {
+            command: StyleCommand::List { file: file_path },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_get_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_get.xlsx");
+
+        let args = StyleArgs {
+            command: StyleCommand::Get {
+                file: file_path,
+                id: 0,
+            },
+        };
+
+        // May fail due to style not existing, that's expected
+        let _ = run(&args, &default_global());
+    }
+
+    #[test]
+    fn test_run_apply_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_apply.xlsx");
+
+        let args = StyleArgs {
+            command: StyleCommand::Apply {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1".to_string(),
+                style_id: 0,
+            },
+        };
+
+        // May fail due to style not existing
+        let _ = run(&args, &default_global());
+    }
+
+    #[test]
+    fn test_run_copy_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_copy.xlsx");
+
+        let args = StyleArgs {
+            command: StyleCommand::Copy {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                source: "A1".to_string(),
+                dest: "B1".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_clear_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_clear.xlsx");
+
+        let args = StyleArgs {
+            command: StyleCommand::Clear {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1".to_string(),
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_copy_style_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "copy_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = copy(&file_path, "Sheet1", "A1", "B1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clear_style_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear_dry.xlsx");
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = clear(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_preset_list_json() {
+        let args = PresetArgs {
+            command: PresetCommand::List,
+        };
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = run_preset(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_freeze_unfreeze() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "unfreeze.xlsx");
+
+        let args = FreezeArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            rows: None,
+            cols: None,
+            at: None,
+            unfreeze: true,
+        };
+
+        let result = run_freeze(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_freeze_with_rows() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "freeze_rows.xlsx");
+
+        let args = FreezeArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            rows: Some(2),
+            cols: None,
+            at: None,
+            unfreeze: false,
+        };
+
+        let result = run_freeze(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_freeze_with_cols() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "freeze_cols.xlsx");
+
+        let args = FreezeArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            rows: None,
+            cols: Some(2),
+            at: None,
+            unfreeze: false,
+        };
+
+        let result = run_freeze(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_freeze_with_at() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "freeze_at.xlsx");
+
+        let args = FreezeArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            rows: None,
+            cols: None,
+            at: Some("B2".to_string()),
+            unfreeze: false,
+        };
+
+        let result = run_freeze(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_freeze_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "freeze_json.xlsx");
+
+        let args = FreezeArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            rows: None,
+            cols: None,
+            at: None,
+            unfreeze: false,
+        };
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = run_freeze(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_style_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "get_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        // Style 0 may not exist, but we test the JSON output path
+        let _ = get(&file_path, 0, &global);
+    }
+
+    // Additional tests for condition branch coverage
+    #[test]
+    fn test_condition_list_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_json.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: None,
+            list: true,
+            remove: false,
+            highlight_cells: false,
+            gt: None,
+            lt: None,
+            eq: None,
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: None,
+        };
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_remove() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_rm.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: true,
+            highlight_cells: false,
+            gt: None,
+            lt: None,
+            eq: None,
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: None,
+        };
+
+        let result = run_condition(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_remove_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_rm_dry.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: true,
+            highlight_cells: false,
+            gt: None,
+            lt: None,
+            eq: None,
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: None,
+        };
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_highlight_gt() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_gt.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: false,
+            highlight_cells: true,
+            gt: Some(10.0),
+            lt: None,
+            eq: None,
+            bg_color: Some("FF0000".to_string()),
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: None,
+        };
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_highlight_lt() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_lt.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: false,
+            highlight_cells: true,
+            gt: None,
+            lt: Some(5.0),
+            eq: None,
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: None,
+        };
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_highlight_eq() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_eq.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: false,
+            highlight_cells: true,
+            gt: None,
+            lt: None,
+            eq: Some(100.0),
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: None,
+        };
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_highlight_dry_run_gt() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_dry_gt.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: false,
+            highlight_cells: true,
+            gt: Some(10.0),
+            lt: None,
+            eq: None,
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: None,
+        };
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_highlight_dry_run_lt() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_dry_lt.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: false,
+            highlight_cells: true,
+            gt: None,
+            lt: Some(5.0),
+            eq: None,
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: None,
+        };
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_highlight_dry_run_eq() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_dry_eq.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: false,
+            highlight_cells: true,
+            gt: None,
+            lt: None,
+            eq: Some(100.0),
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: None,
+        };
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_color_scale() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_scale.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: false,
+            highlight_cells: false,
+            gt: None,
+            lt: None,
+            eq: None,
+            bg_color: None,
+            color_scale: true,
+            min: Some("FF0000".to_string()),
+            max: Some("00FF00".to_string()),
+            data_bars: false,
+            color: None,
+            icon_set: None,
+        };
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_color_scale_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_scale_dry.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: false,
+            highlight_cells: false,
+            gt: None,
+            lt: None,
+            eq: None,
+            bg_color: None,
+            color_scale: true,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: None,
+        };
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_data_bars() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_bars.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: false,
+            highlight_cells: false,
+            gt: None,
+            lt: None,
+            eq: None,
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: true,
+            color: Some("4472C4".to_string()),
+            icon_set: None,
+        };
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_data_bars_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_bars_dry.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: false,
+            highlight_cells: false,
+            gt: None,
+            lt: None,
+            eq: None,
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: true,
+            color: None,
+            icon_set: None,
+        };
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_icon_set() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_icon.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: false,
+            highlight_cells: false,
+            gt: None,
+            lt: None,
+            eq: None,
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: Some("3Arrows".to_string()),
+        };
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_icon_set_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_icon_dry.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: false,
+            highlight_cells: false,
+            gt: None,
+            lt: None,
+            eq: None,
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: Some("3Arrows".to_string()),
+        };
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_no_range_error() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_no_range.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: None, // No range provided
+            list: false,
+            remove: false,
+            highlight_cells: true,
+            gt: Some(10.0),
+            lt: None,
+            eq: None,
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: None,
+        };
+
+        let result = run_condition(&args, &default_global());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_run_condition_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_cond.xlsx");
+
+        let args = StyleArgs {
+            command: StyleCommand::Condition(ConditionArgs {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: None,
+                list: true,
+                remove: false,
+                highlight_cells: false,
+                gt: None,
+                lt: None,
+                eq: None,
+                bg_color: None,
+                color_scale: false,
+                min: None,
+                max: None,
+                data_bars: false,
+                color: None,
+                icon_set: None,
+            }),
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_freeze_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "run_freeze.xlsx");
+
+        let args = StyleArgs {
+            command: StyleCommand::Freeze(FreezeArgs {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                rows: Some(1),
+                cols: None,
+                at: None,
+                unfreeze: false,
+            }),
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_preset_command() {
+        let args = StyleArgs {
+            command: StyleCommand::Preset(PresetArgs {
+                command: PresetCommand::List,
+            }),
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_preset_apply() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "preset_apply.xlsx");
+
+        let args = PresetArgs {
+            command: PresetCommand::Apply {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1:B2".to_string(),
+                preset: "header".to_string(),
+            },
+        };
+
+        // Preset apply is not yet implemented, so it should fail
+        let result = run_preset(&args, &default_global());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_preset_apply_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "preset_dry.xlsx");
+
+        let args = PresetArgs {
+            command: PresetCommand::Apply {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1:B2".to_string(),
+                preset: "header".to_string(),
+            },
+        };
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = run_preset(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_preset_apply_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "preset_json.xlsx");
+
+        let args = PresetArgs {
+            command: PresetCommand::Apply {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1:B2".to_string(),
+                preset: "header".to_string(),
+            },
+        };
+
+        let mut global = default_global();
+        global.quiet = false;
+        global.format = OutputFormat::Json;
+
+        // Not implemented, so should fail
+        let result = run_preset(&args, &global);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_preset_apply_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "preset_verbose.xlsx");
+
+        let args = PresetArgs {
+            command: PresetCommand::Apply {
+                file: file_path,
+                sheet: "Sheet1".to_string(),
+                range: "A1:B2".to_string(),
+                preset: "header".to_string(),
+            },
+        };
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        // Not implemented, so should fail
+        let result = run_preset(&args, &global);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_freeze_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "freeze_verbose.xlsx");
+
+        let args = FreezeArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            rows: Some(1),
+            cols: Some(1),
+            at: None,
+            unfreeze: false,
+        };
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = run_freeze(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_freeze_unfreeze_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "unfreeze_verbose.xlsx");
+
+        let args = FreezeArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            rows: None,
+            cols: None,
+            at: None,
+            unfreeze: true,
+        };
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = run_freeze(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_copy_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "copy_verbose.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = copy(&file_path, "Sheet1", "A1", "B1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clear_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "clear_verbose.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = clear(&file_path, "Sheet1", "A1", &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_remove_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "cond_rm_verbose.xlsx");
+
+        let args = ConditionArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            range: Some("A1:B2".to_string()),
+            list: false,
+            remove: true,
+            highlight_cells: false,
+            gt: None,
+            lt: None,
+            eq: None,
+            bg_color: None,
+            color_scale: false,
+            min: None,
+            max: None,
+            data_bars: false,
+            color: None,
+            icon_set: None,
+        };
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = run_condition(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_list_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = create_test_workbook(&temp_dir, "list_verbose.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let result = list(&file_path, &global);
+        assert!(result.is_ok());
+    }
+}

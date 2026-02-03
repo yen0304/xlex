@@ -392,3 +392,412 @@ fn import_ndjson(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn default_global() -> GlobalOptions {
+        GlobalOptions {
+            quiet: true,
+            verbose: false,
+            format: super::super::OutputFormat::Text,
+            no_color: true,
+            color: false,
+            json_errors: false,
+            dry_run: false,
+            output: None,
+        }
+    }
+
+    #[test]
+    fn test_parse_value_number() {
+        assert_eq!(parse_value("42"), CellValue::Number(42.0));
+        assert_eq!(parse_value("3.14"), CellValue::Number(3.14));
+        assert_eq!(parse_value("-100"), CellValue::Number(-100.0));
+    }
+
+    #[test]
+    fn test_parse_value_boolean() {
+        assert_eq!(parse_value("true"), CellValue::Boolean(true));
+        assert_eq!(parse_value("TRUE"), CellValue::Boolean(true));
+        assert_eq!(parse_value("yes"), CellValue::Boolean(true));
+        assert_eq!(parse_value("false"), CellValue::Boolean(false));
+    }
+
+    #[test]
+    fn test_parse_value_string() {
+        assert_eq!(parse_value("hello"), CellValue::String("hello".to_string()));
+    }
+
+    #[test]
+    fn test_parse_value_empty() {
+        assert_eq!(parse_value(""), CellValue::Empty);
+    }
+
+    #[test]
+    fn test_json_to_cell() {
+        assert_eq!(json_to_cell(&serde_json::Value::Null), CellValue::Empty);
+        assert_eq!(
+            json_to_cell(&serde_json::Value::Bool(true)),
+            CellValue::Boolean(true)
+        );
+        assert_eq!(
+            json_to_cell(&serde_json::json!(42)),
+            CellValue::Number(42.0)
+        );
+        assert_eq!(
+            json_to_cell(&serde_json::Value::String("test".to_string())),
+            CellValue::String("test".to_string())
+        );
+    }
+
+    #[test]
+    fn test_import_csv() {
+        let temp_dir = TempDir::new().unwrap();
+        let csv_path = temp_dir.path().join("data.csv");
+        let xlsx_path = temp_dir.path().join("output.xlsx");
+
+        std::fs::write(&csv_path, "Name,Age\nAlice,30\nBob,25").unwrap();
+
+        let result = import_csv(&csv_path, &xlsx_path, None, ',', false, &default_global());
+        assert!(result.is_ok());
+        assert!(xlsx_path.exists());
+
+        let wb = Workbook::open(&xlsx_path).unwrap();
+        let cell_ref = CellRef::new(1, 1);
+        let value = wb.get_cell("Sheet1", &cell_ref).unwrap();
+        assert_eq!(value, CellValue::String("Name".to_string()));
+    }
+
+    #[test]
+    fn test_import_csv_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let csv_path = temp_dir.path().join("data.csv");
+        let xlsx_path = temp_dir.path().join("output.xlsx");
+
+        std::fs::write(&csv_path, "Name,Age\nAlice,30").unwrap();
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = import_csv(&csv_path, &xlsx_path, None, ',', false, &global);
+        assert!(result.is_ok());
+        assert!(!xlsx_path.exists()); // Should not create file
+    }
+
+    #[test]
+    fn test_import_tsv() {
+        let temp_dir = TempDir::new().unwrap();
+        let tsv_path = temp_dir.path().join("data.tsv");
+        let xlsx_path = temp_dir.path().join("output.xlsx");
+
+        std::fs::write(&tsv_path, "Name\tAge\nAlice\t30\nBob\t25").unwrap();
+
+        let result = import_tsv(&tsv_path, &xlsx_path, None, &default_global());
+        assert!(result.is_ok());
+        assert!(xlsx_path.exists());
+    }
+
+    #[test]
+    fn test_import_json_array_of_objects() {
+        let temp_dir = TempDir::new().unwrap();
+        let json_path = temp_dir.path().join("data.json");
+        let xlsx_path = temp_dir.path().join("output.xlsx");
+
+        std::fs::write(
+            &json_path,
+            r#"[{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]"#,
+        )
+        .unwrap();
+
+        let result = import_json(&json_path, &xlsx_path, None, &default_global());
+        assert!(result.is_ok());
+        assert!(xlsx_path.exists());
+    }
+
+    #[test]
+    fn test_import_json_array_of_arrays() {
+        let temp_dir = TempDir::new().unwrap();
+        let json_path = temp_dir.path().join("data.json");
+        let xlsx_path = temp_dir.path().join("output.xlsx");
+
+        std::fs::write(&json_path, r#"[["Name", "Age"], ["Alice", 30]]"#).unwrap();
+
+        let result = import_json(&json_path, &xlsx_path, None, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_import_ndjson() {
+        let temp_dir = TempDir::new().unwrap();
+        let ndjson_path = temp_dir.path().join("data.ndjson");
+        let xlsx_path = temp_dir.path().join("output.xlsx");
+
+        std::fs::write(
+            &ndjson_path,
+            r#"{"name": "Alice", "age": 30}
+{"name": "Bob", "age": 25}"#,
+        )
+        .unwrap();
+
+        let result = import_ndjson(&ndjson_path, &xlsx_path, None, true, &default_global());
+        assert!(result.is_ok());
+        assert!(xlsx_path.exists());
+    }
+
+    #[test]
+    fn test_import_ndjson_array_format() {
+        let temp_dir = TempDir::new().unwrap();
+        let ndjson_path = temp_dir.path().join("data.ndjson");
+        let xlsx_path = temp_dir.path().join("output.xlsx");
+
+        std::fs::write(
+            &ndjson_path,
+            r#"["Alice", 30]
+["Bob", 25]"#,
+        )
+        .unwrap();
+
+        let result = import_ndjson(&ndjson_path, &xlsx_path, None, false, &default_global());
+        assert!(result.is_ok());
+    }
+
+    // Additional tests for better coverage
+
+    #[test]
+    fn test_import_csv_with_sheet() {
+        let temp_dir = TempDir::new().unwrap();
+        let csv_path = temp_dir.path().join("data_sheet.csv");
+        let xlsx_path = temp_dir.path().join("output_sheet.xlsx");
+
+        std::fs::write(&csv_path, "A,B\n1,2\n3,4").unwrap();
+
+        let result = import_csv(
+            &csv_path,
+            &xlsx_path,
+            Some("Data"),
+            ',',
+            false,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&xlsx_path).unwrap();
+        assert!(wb.get_sheet("Data").is_some());
+    }
+
+    #[test]
+    fn test_import_csv_with_header() {
+        let temp_dir = TempDir::new().unwrap();
+        let csv_path = temp_dir.path().join("data_header.csv");
+        let xlsx_path = temp_dir.path().join("output_header.xlsx");
+
+        std::fs::write(&csv_path, "Name,Age\nAlice,30\nBob,25").unwrap();
+
+        let result = import_csv(&csv_path, &xlsx_path, None, ',', true, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_import_csv_semicolon_delimiter() {
+        let temp_dir = TempDir::new().unwrap();
+        let csv_path = temp_dir.path().join("data_semi.csv");
+        let xlsx_path = temp_dir.path().join("output_semi.xlsx");
+
+        std::fs::write(&csv_path, "Name;Age\nAlice;30").unwrap();
+
+        let result = import_csv(&csv_path, &xlsx_path, None, ';', false, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_import_json_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let json_path = temp_dir.path().join("data_dry.json");
+        let xlsx_path = temp_dir.path().join("output_dry.xlsx");
+
+        std::fs::write(&json_path, r#"[{"a": 1}]"#).unwrap();
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = import_json(&json_path, &xlsx_path, None, &global);
+        assert!(result.is_ok());
+        assert!(!xlsx_path.exists());
+    }
+
+    #[test]
+    fn test_import_ndjson_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let ndjson_path = temp_dir.path().join("data_dry.ndjson");
+        let xlsx_path = temp_dir.path().join("output_dry.xlsx");
+
+        std::fs::write(&ndjson_path, r#"{"a": 1}"#).unwrap();
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let result = import_ndjson(&ndjson_path, &xlsx_path, None, true, &global);
+        assert!(result.is_ok());
+        assert!(!xlsx_path.exists());
+    }
+
+    #[test]
+    fn test_import_tsv_with_sheet() {
+        let temp_dir = TempDir::new().unwrap();
+        let tsv_path = temp_dir.path().join("data_sheet.tsv");
+        let xlsx_path = temp_dir.path().join("output_sheet.xlsx");
+
+        std::fs::write(&tsv_path, "A\tB\n1\t2").unwrap();
+
+        let result = import_tsv(&tsv_path, &xlsx_path, Some("MySheet"), &default_global());
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&xlsx_path).unwrap();
+        assert!(wb.get_sheet("MySheet").is_some());
+    }
+
+    #[test]
+    fn test_import_json_with_sheet() {
+        let temp_dir = TempDir::new().unwrap();
+        let json_path = temp_dir.path().join("data_sheet.json");
+        let xlsx_path = temp_dir.path().join("output_sheet.xlsx");
+
+        std::fs::write(&json_path, r#"[{"x": 1}]"#).unwrap();
+
+        let result = import_json(&json_path, &xlsx_path, Some("JsonData"), &default_global());
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&xlsx_path).unwrap();
+        assert!(wb.get_sheet("JsonData").is_some());
+    }
+
+    #[test]
+    fn test_import_ndjson_with_sheet() {
+        let temp_dir = TempDir::new().unwrap();
+        let ndjson_path = temp_dir.path().join("data_sheet.ndjson");
+        let xlsx_path = temp_dir.path().join("output_sheet.xlsx");
+
+        std::fs::write(&ndjson_path, r#"{"y": 2}"#).unwrap();
+
+        let result = import_ndjson(
+            &ndjson_path,
+            &xlsx_path,
+            Some("NdjsonData"),
+            true,
+            &default_global(),
+        );
+        assert!(result.is_ok());
+
+        let wb = Workbook::open(&xlsx_path).unwrap();
+        assert!(wb.get_sheet("NdjsonData").is_some());
+    }
+
+    #[test]
+    fn test_run_csv_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let csv_path = temp_dir.path().join("run.csv");
+        let xlsx_path = temp_dir.path().join("run.xlsx");
+
+        std::fs::write(&csv_path, "A,B\n1,2").unwrap();
+
+        let args = ImportArgs {
+            command: ImportCommand::Csv {
+                source: csv_path,
+                dest: xlsx_path.clone(),
+                sheet: None,
+                delimiter: ',',
+                header: false,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_tsv_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let tsv_path = temp_dir.path().join("run.tsv");
+        let xlsx_path = temp_dir.path().join("run.xlsx");
+
+        std::fs::write(&tsv_path, "A\tB\n1\t2").unwrap();
+
+        let args = ImportArgs {
+            command: ImportCommand::Tsv {
+                source: tsv_path,
+                dest: xlsx_path,
+                sheet: None,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_json_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let json_path = temp_dir.path().join("run.json");
+        let xlsx_path = temp_dir.path().join("run.xlsx");
+
+        std::fs::write(&json_path, r#"[{"a": 1}]"#).unwrap();
+
+        let args = ImportArgs {
+            command: ImportCommand::Json {
+                source: json_path,
+                dest: xlsx_path,
+                sheet: None,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_ndjson_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let ndjson_path = temp_dir.path().join("run.ndjson");
+        let xlsx_path = temp_dir.path().join("run.xlsx");
+
+        std::fs::write(&ndjson_path, r#"{"b": 2}"#).unwrap();
+
+        let args = ImportArgs {
+            command: ImportCommand::Ndjson {
+                source: ndjson_path,
+                dest: xlsx_path,
+                sheet: None,
+                header: true,
+            },
+        };
+
+        let result = run(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_json_to_cell_array() {
+        let arr = serde_json::json!([1, 2, 3]);
+        let result = json_to_cell(&arr);
+        // Arrays are converted to strings
+        assert!(matches!(result, CellValue::String(_)));
+    }
+
+    #[test]
+    fn test_json_to_cell_object() {
+        let obj = serde_json::json!({"key": "value"});
+        let result = json_to_cell(&obj);
+        // Objects are converted to strings
+        assert!(matches!(result, CellValue::String(_)));
+    }
+
+    #[test]
+    fn test_parse_value_yes_no() {
+        assert_eq!(parse_value("YES"), CellValue::Boolean(true));
+        assert_eq!(parse_value("no"), CellValue::Boolean(false));
+        assert_eq!(parse_value("NO"), CellValue::Boolean(false));
+    }
+}

@@ -682,4 +682,574 @@ mod tests {
         let result = stats(&args, &global);
         assert!(result.is_ok());
     }
+
+    // Additional tests for better coverage
+
+    #[test]
+    fn test_create_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("create_json.xlsx");
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let args = CreateArgs {
+            file: file_path,
+            sheet: "Sheet1".to_string(),
+            sheets: None,
+            force: false,
+        };
+
+        let result = create(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clone_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("source_json.xlsx");
+        let dest_path = temp_dir.path().join("dest_json.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&source_path).unwrap();
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+        global.quiet = false;
+
+        let args = CloneArgs {
+            source: source_path,
+            dest: dest_path,
+            force: false,
+        };
+
+        let result = clone(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clone_with_force() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("source_force.xlsx");
+        let dest_path = temp_dir.path().join("dest_force.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&source_path).unwrap();
+        wb.save_as(&dest_path).unwrap(); // Create dest first
+
+        let args = CloneArgs {
+            source: source_path,
+            dest: dest_path.clone(),
+            force: true,
+        };
+
+        let result = clone(&args, &default_global());
+        assert!(result.is_ok());
+        assert!(dest_path.exists());
+    }
+
+    #[test]
+    fn test_props_get_all() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let args = PropsArgs {
+            command: PropsCommand::Get {
+                file: file_path,
+                property: None,
+            },
+        };
+
+        let result = props(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_get_title() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_title.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let args = PropsArgs {
+            command: PropsCommand::Get {
+                file: file_path,
+                property: Some("title".to_string()),
+            },
+        };
+
+        let result = props(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_get_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_json.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let args = PropsArgs {
+            command: PropsCommand::Get {
+                file: file_path,
+                property: None,
+            },
+        };
+
+        let result = props(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_set_title() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_set.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let args = PropsArgs {
+            command: PropsCommand::Set {
+                file: file_path,
+                property: "title".to_string(),
+                value: "My Workbook".to_string(),
+            },
+        };
+
+        let result = props(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_set_dry_run() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_dry.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let mut global = default_global();
+        global.dry_run = true;
+
+        let args = PropsArgs {
+            command: PropsCommand::Set {
+                file: file_path,
+                property: "title".to_string(),
+                value: "Test".to_string(),
+            },
+        };
+
+        let result = props(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_set_unknown() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_unknown.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let args = PropsArgs {
+            command: PropsCommand::Set {
+                file: file_path,
+                property: "unknownProp".to_string(),
+                value: "value".to_string(),
+            },
+        };
+
+        let result = props(&args, &default_global());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_props_set_subject() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_subject.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let args = PropsArgs {
+            command: PropsCommand::Set {
+                file: file_path,
+                property: "subject".to_string(),
+                value: "Test Subject".to_string(),
+            },
+        };
+
+        let result = props(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_set_creator() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_creator.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let args = PropsArgs {
+            command: PropsCommand::Set {
+                file: file_path,
+                property: "creator".to_string(),
+                value: "Test Author".to_string(),
+            },
+        };
+
+        let result = props(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_get_specific_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_spec_json.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let args = PropsArgs {
+            command: PropsCommand::Get {
+                file: file_path,
+                property: Some("creator".to_string()),
+            },
+        };
+
+        let result = props(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_invalid_json_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("invalid_json.xlsx");
+
+        std::fs::write(&file_path, "not a valid xlsx").unwrap();
+
+        let mut global = default_global();
+        global.format = OutputFormat::Json;
+
+        let args = ValidateArgs { file: file_path };
+
+        let result = validate(&args, &global);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_info_with_properties() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("info_props.xlsx");
+
+        let mut wb = Workbook::new();
+        {
+            let props = wb.properties_mut();
+            props.title = Some("Test Title".to_string());
+            props.creator = Some("Test Creator".to_string());
+        }
+        wb.save_as(&file_path).unwrap();
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let args = InfoArgs { file: file_path };
+
+        let result = info(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_info_with_all_properties() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("info_all_props.xlsx");
+
+        let mut wb = Workbook::new();
+        {
+            let props = wb.properties_mut();
+            props.title = Some("Test Title".to_string());
+            props.creator = Some("Test Creator".to_string());
+            props.subject = Some("Test Subject".to_string());
+            props.description = Some("Test Description".to_string());
+            props.keywords = Some("test, keywords".to_string());
+        }
+        wb.save_as(&file_path).unwrap();
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let args = InfoArgs { file: file_path };
+        let result = info(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_verbose_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("valid_verbose.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let args = ValidateArgs { file: file_path };
+
+        let result = validate(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_clone_verbose_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("source_verbose.xlsx");
+        let dest_path = temp_dir.path().join("dest_verbose.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&source_path).unwrap();
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let args = CloneArgs {
+            source: source_path,
+            dest: dest_path,
+            force: false,
+        };
+
+        let result = clone(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_create_verbose_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("create_verbose.xlsx");
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let args = CreateArgs {
+            file: file_path,
+            sheet: "TestSheet".to_string(),
+            sheets: None,
+            force: false,
+        };
+
+        let result = create(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_get_all_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_all_verbose.xlsx");
+
+        let mut wb = Workbook::new();
+        {
+            let props = wb.properties_mut();
+            props.title = Some("Title".to_string());
+            props.subject = Some("Subject".to_string());
+            props.creator = Some("Creator".to_string());
+            props.keywords = Some("Keywords".to_string());
+            props.description = Some("Description".to_string());
+            props.last_modified_by = Some("Last Modified".to_string());
+            props.category = Some("Category".to_string());
+        }
+        wb.save_as(&file_path).unwrap();
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let args = PropsArgs {
+            command: PropsCommand::Get {
+                file: file_path,
+                property: None,
+            },
+        };
+
+        let result = props(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_set_keywords() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_keywords.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let args = PropsArgs {
+            command: PropsCommand::Set {
+                file: file_path,
+                property: "keywords".to_string(),
+                value: "test, keywords".to_string(),
+            },
+        };
+
+        let result = props(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_set_description() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_desc.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let args = PropsArgs {
+            command: PropsCommand::Set {
+                file: file_path,
+                property: "description".to_string(),
+                value: "Test Description".to_string(),
+            },
+        };
+
+        let result = props(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_set_last_modified_by() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_last.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let args = PropsArgs {
+            command: PropsCommand::Set {
+                file: file_path,
+                property: "lastModifiedBy".to_string(),
+                value: "John Doe".to_string(),
+            },
+        };
+
+        let result = props(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_set_category() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_cat.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let args = PropsArgs {
+            command: PropsCommand::Set {
+                file: file_path,
+                property: "category".to_string(),
+                value: "Reports".to_string(),
+            },
+        };
+
+        let result = props(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_set_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_set_verbose.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let args = PropsArgs {
+            command: PropsCommand::Set {
+                file: file_path,
+                property: "title".to_string(),
+                value: "New Title".to_string(),
+            },
+        };
+
+        let result = props(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_stats_verbose() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("stats_verbose.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let mut global = default_global();
+        global.quiet = false;
+
+        let args = StatsArgs { file: file_path };
+
+        let result = stats(&args, &global);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_get_specific_text() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_spec_text.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        let args = PropsArgs {
+            command: PropsCommand::Get {
+                file: file_path,
+                property: Some("title".to_string()),
+            },
+        };
+
+        let result = props(&args, &default_global());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_props_get_all_properties() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("props_get_all.xlsx");
+
+        let wb = Workbook::new();
+        wb.save_as(&file_path).unwrap();
+
+        // Test getting each property type
+        for prop in &[
+            "subject",
+            "creator",
+            "keywords",
+            "description",
+            "lastModifiedBy",
+            "category",
+        ] {
+            let args = PropsArgs {
+                command: PropsCommand::Get {
+                    file: file_path.clone(),
+                    property: Some(prop.to_string()),
+                },
+            };
+            let result = props(&args, &default_global());
+            assert!(result.is_ok());
+        }
+    }
 }
