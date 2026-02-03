@@ -1,9 +1,11 @@
 //! XLSX parsing utilities.
 
+mod lazy_shared_strings;
 mod shared_strings;
 mod styles;
 mod workbook;
 
+pub use lazy_shared_strings::LazySharedStrings;
 pub use shared_strings::SharedStringsParser;
 pub use styles::StylesParser;
 pub use workbook::WorkbookParser;

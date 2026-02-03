@@ -1,8 +1,7 @@
 //! Workbook type and operations.
 
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufReader, Read, Seek};
+use std::io::{Read, Seek};
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
@@ -115,15 +114,10 @@ pub struct Workbook {
 
 impl Workbook {
     /// Opens an existing workbook from a file.
+    ///
+    /// Automatically uses memory mapping for large files (>10MB) for better performance.
     pub fn open(path: impl AsRef<Path>) -> XlexResult<Self> {
         let path = path.as_ref();
-
-        // Check file exists
-        if !path.exists() {
-            return Err(XlexError::FileNotFound {
-                path: path.to_path_buf(),
-            });
-        }
 
         // Check extension
         if path.extension().and_then(|e| e.to_str()) != Some("xlsx") {
@@ -132,19 +126,10 @@ impl Workbook {
             });
         }
 
-        // Open file
-        let file = File::open(path).map_err(|e| {
-            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                XlexError::PermissionDenied {
-                    path: path.to_path_buf(),
-                }
-            } else {
-                XlexError::from(e)
-            }
-        })?;
-
-        let reader = BufReader::new(file);
-        Self::from_reader(reader, Some(path.to_path_buf()))
+        // Use WorkbookReader for automatic mmap handling
+        let wb_reader = crate::reader::WorkbookReader::open(path)?;
+        let cursor = std::io::Cursor::new(wb_reader.as_bytes());
+        Self::from_reader(cursor, Some(path.to_path_buf()))
     }
 
     /// Creates a workbook from a reader.

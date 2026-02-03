@@ -10,16 +10,13 @@ use zip::ZipArchive;
 
 use crate::cell::{Cell, CellError, CellRef, CellValue};
 use crate::error::{XlexError, XlexResult};
-use crate::parser::{validate_xlsx_structure, SharedStringsParser, StylesParser};
+use crate::parser::{validate_xlsx_structure, LazySharedStrings, StylesParser};
 use crate::sheet::{Sheet, SheetInfo, SheetVisibility};
 use crate::style::StyleRegistry;
 use crate::workbook::{DefinedName, DocumentProperties, Workbook};
 
 /// Parser for xlsx workbooks.
 pub struct WorkbookParser {
-    /// Shared strings parser
-    #[allow(dead_code)]
-    shared_strings: SharedStringsParser,
     /// Styles parser
     styles_parser: StylesParser,
 }
@@ -28,7 +25,6 @@ impl WorkbookParser {
     /// Creates a new workbook parser.
     pub fn new() -> Self {
         Self {
-            shared_strings: SharedStringsParser::with_default_cache(),
             styles_parser: StylesParser::new(),
         }
     }
@@ -42,13 +38,21 @@ impl WorkbookParser {
         // Validate structure
         validate_xlsx_structure(archive)?;
 
-        // Parse shared strings if present
-        let shared_strings = if let Ok(file) = archive.by_name("xl/sharedStrings.xml") {
-            let mut parser = SharedStringsParser::with_default_cache();
-            parser.parse_all(BufReader::new(file))?
+        // Parse shared strings lazily if present
+        let mut lazy_strings = if let Ok(mut file) = archive.by_name("xl/sharedStrings.xml") {
+            let mut data = Vec::new();
+            file.read_to_end(&mut data)
+                .map_err(|e| XlexError::IoError {
+                    message: e.to_string(),
+                    source: Some(e),
+                })?;
+            LazySharedStrings::from_bytes_default(data)?
         } else {
-            Vec::new()
+            LazySharedStrings::default()
         };
+
+        // Convert to Vec for backward compatibility (will be optimized later)
+        let shared_strings = lazy_strings.to_vec();
 
         // Parse styles if present
         let style_registry = if let Ok(file) = archive.by_name("xl/styles.xml") {
@@ -66,23 +70,70 @@ impl WorkbookParser {
         // Parse relationships to get sheet file paths
         let relationships = self.parse_relationships(archive)?;
 
-        // Parse each sheet
-        let mut sheets = Vec::new();
+        // Collect sheet data (path + XML bytes) for parallel parsing
+        let sheet_data: Vec<(usize, SheetInfo, Vec<u8>)> = sheet_infos
+            .into_iter()
+            .enumerate()
+            .map(|(index, info)| {
+                let sheet_path = relationships
+                    .get(&info.rel_id)
+                    .map(|s| format!("xl/{}", s))
+                    .unwrap_or_else(|| format!("xl/worksheets/sheet{}.xml", index + 1));
+
+                if let Ok(mut file) = archive.by_name(&sheet_path) {
+                    let mut data = Vec::new();
+                    if file.read_to_end(&mut data).is_ok() {
+                        return (index, info, data);
+                    }
+                }
+                // Return empty data for missing sheets
+                (index, info, Vec::new())
+            })
+            .collect();
+
+        // Parse sheets (parallel when feature enabled, sequential otherwise)
+        #[cfg(feature = "parallel")]
+        let parsed_sheets: Vec<(usize, String, XlexResult<Sheet>)> = {
+            use rayon::prelude::*;
+            sheet_data
+                .into_par_iter()
+                .map(|(index, info, data)| {
+                    let name = info.name.clone();
+                    let sheet = if data.is_empty() {
+                        Ok(Sheet::new(info))
+                    } else {
+                        self.parse_sheet(std::io::Cursor::new(data), info, &shared_strings)
+                    };
+                    (index, name, sheet)
+                })
+                .collect()
+        };
+
+        #[cfg(not(feature = "parallel"))]
+        let parsed_sheets: Vec<(usize, String, XlexResult<Sheet>)> = sheet_data
+            .into_iter()
+            .map(|(index, info, data)| {
+                let name = info.name.clone();
+                let sheet = if data.is_empty() {
+                    Ok(Sheet::new(info))
+                } else {
+                    self.parse_sheet(std::io::Cursor::new(data), info, &shared_strings)
+                };
+                (index, name, sheet)
+            })
+            .collect();
+
+        // Build sheets vector and map, maintaining order
+        let mut sheets = Vec::with_capacity(parsed_sheets.len());
         let mut sheet_map = HashMap::new();
 
-        for (index, info) in sheet_infos.into_iter().enumerate() {
-            let sheet_path = relationships
-                .get(&info.rel_id)
-                .map(|s| format!("xl/{}", s))
-                .unwrap_or_else(|| format!("xl/worksheets/sheet{}.xml", index + 1));
+        // Sort by index to maintain original order
+        let mut sorted_sheets = parsed_sheets;
+        sorted_sheets.sort_by_key(|(idx, _, _)| *idx);
 
-            let sheet = if let Ok(file) = archive.by_name(&sheet_path) {
-                self.parse_sheet(BufReader::new(file), info.clone(), &shared_strings)?
-            } else {
-                Sheet::new(info.clone())
-            };
-
-            sheet_map.insert(info.name.clone(), index);
+        for (index, name, sheet_result) in sorted_sheets {
+            let sheet = sheet_result?;
+            sheet_map.insert(name, index);
             sheets.push(sheet);
         }
 

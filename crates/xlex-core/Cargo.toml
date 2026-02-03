@@ -10,6 +10,10 @@ readme = "README.md"
 keywords = ["excel", "xlsx", "spreadsheet", "parser"]
 categories = ["parser-implementations", "data-structures"]
 
+[features]
+default = ["parallel"]
+parallel = ["rayon"]
+
 [dependencies]
 zip = { workspace = true }
 quick-xml = { workspace = true }
@@ -21,6 +25,8 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 regex = { workspace = true }
 handlebars = { workspace = true }
+memmap2 = { workspace = true }
+rayon = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

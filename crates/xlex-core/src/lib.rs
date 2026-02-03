@@ -33,8 +33,10 @@
 
 pub mod cell;
 pub mod error;
+pub mod lazy;
 pub mod parser;
 pub mod range;
+pub mod reader;
 pub mod sheet;
 pub mod style;
 pub mod workbook;
@@ -43,7 +45,9 @@ pub mod writer;
 // Re-exports
 pub use cell::{Cell, CellRef, CellValue};
 pub use error::{XlexError, XlexResult};
+pub use lazy::{LazyWorkbook, StreamRow};
 pub use range::Range;
+pub use reader::WorkbookReader;
 pub use sheet::Sheet;
 pub use style::{Style, StyleRegistry};
 pub use workbook::{DefinedName, Workbook};
