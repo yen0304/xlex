@@ -8,7 +8,7 @@ members = [
 [workspace.package]
 version = "0.2.0"
 edition = "2021"
-rust-version = "1.75"  # MSRV - also update .github/workflows/ci.yml
+rust-version = "1.80"  # MSRV - also update .github/workflows/ci.yml
 authors = ["yen0304"]
 license = "MIT"
 repository = "https://github.com/yen0304/xlex"
