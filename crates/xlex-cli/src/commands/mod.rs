@@ -15,14 +15,24 @@ mod workbook;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-/// XLEX - A streaming Excel manipulation tool.
-///
-/// XLEX provides CLI-first, streaming-based Excel manipulation for developers
-/// and automation pipelines. It can handle files up to 200MB without memory
-/// exhaustion.
+const LONG_ABOUT: &str = r#"XLEX - A streaming Excel manipulation tool.
+
+XLEX provides CLI-first, streaming-based Excel manipulation for developers
+and automation pipelines. It can handle files up to 200MB without memory
+exhaustion.
+
+PERFORMANCE TIP:
+  For large files (>10MB), use session mode for faster repeated operations:
+
+    $ xlex session <file>
+
+  Session mode loads the file once and keeps it in memory, making subsequent
+  commands instant instead of re-parsing the file each time."#;
+
+/// CLI tool for XLEX - A streaming Excel manipulation engine.
 #[derive(Parser)]
 #[command(name = "xlex")]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = LONG_ABOUT)]
 #[command(propagate_version = true)]
 pub struct Cli {
     #[command(subcommand)]
