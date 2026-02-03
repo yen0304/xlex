@@ -11,8 +11,10 @@
 <p align="center">
   <a href="https://github.com/yen0304/xlex/actions/workflows/ci.yml"><img src="https://github.com/yen0304/xlex/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://codecov.io/gh/yen0304/xlex"><img src="https://codecov.io/gh/yen0304/xlex/graph/badge.svg" alt="codecov"></a>
+  <a href="https://crates.io/crates/xlex-cli"><img src="https://img.shields.io/crates/v/xlex-cli.svg" alt="crates.io"></a>
+  <a href="https://www.npmjs.com/package/xlex"><img src="https://img.shields.io/npm/v/xlex.svg" alt="npm"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://blog.rust-lang.org/2023/12/28/Rust-1.75.0.html"><img src="https://img.shields.io/badge/MSRV-1.75-blue.svg" alt="MSRV"></a>
+  <a href="https://blog.rust-lang.org/2024/07/25/Rust-1.80.0.html"><img src="https://img.shields.io/badge/MSRV-1.80-blue.svg" alt="MSRV"></a>
 </p>
 
 ## Features
