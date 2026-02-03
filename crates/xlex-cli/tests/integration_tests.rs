@@ -1122,8 +1122,17 @@ mod style_operations {
             "cell", "set", xlsx_str, "Sheet1", "A1", "Header"
         ]));
 
-        // TODO: range style --bold has a bug - just verify the file was created
-        assert!(std::path::Path::new(xlsx_str).exists());
+        // Apply bold style to range
+        assert!(xlex_success(&[
+            "range", "style", xlsx_str, "Sheet1", "A1:B2", "--bold"
+        ]));
+
+        // Verify the style was applied by checking style list output contains bold
+        let output = xlex(&["style", "list", xlsx_str, "-f", "json"]);
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Should have a style with bold: true
+        assert!(stdout.contains(r#""bold":true"#) || stdout.contains(r#""bold": true"#));
     }
 
     #[test]

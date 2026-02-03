@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-02-03
+
+### Fixed
+
+- **Range Style**: Fixed `range style --bold` command now correctly applies styles to cells
+- **Integration Tests**: Updated range style test to verify style application
+
+### Improved
+
+- **SharedStrings Deduplication**: Added O(1) HashMap lookup for shared string deduplication
+  - Previously O(n) linear search, now instant lookup
+  - Significant performance improvement for workbooks with many repeated strings
+
 ## [0.2.0] - 2026-02-03
 
 ### Added
@@ -50,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-platform support (Linux, macOS, Windows)
 - Installation via cargo, brew, npm, curl
 
-[Unreleased]: https://github.com/yen0304/xlex/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/yen0304/xlex/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/yen0304/xlex/compare/v0.2.0...v0.2.4
 [0.2.0]: https://github.com/yen0304/xlex/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/yen0304/xlex/releases/tag/v0.1.0

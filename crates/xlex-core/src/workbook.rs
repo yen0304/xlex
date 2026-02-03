@@ -104,6 +104,8 @@ pub struct Workbook {
     style_registry: StyleRegistry,
     /// Shared strings
     shared_strings: Vec<String>,
+    /// Shared strings index map for O(1) deduplication lookup
+    shared_strings_map: HashMap<String, usize>,
     /// Defined names (named ranges)
     defined_names: Vec<DefinedName>,
     /// Active sheet index
@@ -148,6 +150,7 @@ impl Workbook {
             sheet_map: HashMap::new(),
             style_registry: StyleRegistry::new(),
             shared_strings: Vec::new(),
+            shared_strings_map: HashMap::new(),
             defined_names: Vec::new(),
             active_sheet: 0,
             modified: true,
@@ -167,6 +170,7 @@ impl Workbook {
             sheet_map: HashMap::new(),
             style_registry: StyleRegistry::new(),
             shared_strings: Vec::new(),
+            shared_strings_map: HashMap::new(),
             defined_names: Vec::new(),
             active_sheet: 0,
             modified: true,
@@ -523,12 +527,23 @@ impl Workbook {
     }
 
     /// Adds a shared string and returns its index.
+    ///
+    /// Uses O(1) HashMap lookup for deduplication. If the string already exists,
+    /// returns the existing index. Otherwise, adds the string and returns the new index.
     pub fn add_shared_string(&mut self, s: impl Into<String>) -> usize {
         let s = s.into();
-        // TODO: Use a hash map for deduplication
+
+        // Check if string already exists using O(1) HashMap lookup
+        if let Some(&index) = self.shared_strings_map.get(&s) {
+            return index;
+        }
+
+        // Add new string
+        let index = self.shared_strings.len();
+        self.shared_strings_map.insert(s.clone(), index);
         self.shared_strings.push(s);
         self.modified = true;
-        self.shared_strings.len() - 1
+        index
     }
 
     /// Calculates workbook statistics.
@@ -638,6 +653,13 @@ impl Workbook {
         active_sheet: usize,
         modified: bool,
     ) -> Self {
+        // Build the deduplication map from existing shared strings
+        let shared_strings_map: HashMap<String, usize> = shared_strings
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (s.clone(), i))
+            .collect();
+
         Self {
             path,
             properties,
@@ -645,6 +667,7 @@ impl Workbook {
             sheet_map,
             style_registry,
             shared_strings,
+            shared_strings_map,
             defined_names,
             active_sheet,
             modified,
@@ -1296,6 +1319,46 @@ mod tests {
             result.unwrap_err(),
             XlexError::SheetNotFound { .. }
         ));
+    }
+
+    #[test]
+    fn test_add_shared_string_deduplication() {
+        let mut wb = Workbook::new();
+
+        // Add first string
+        let idx1 = wb.add_shared_string("Hello");
+        assert_eq!(idx1, 0);
+        assert_eq!(wb.shared_strings().len(), 1);
+
+        // Add different string
+        let idx2 = wb.add_shared_string("World");
+        assert_eq!(idx2, 1);
+        assert_eq!(wb.shared_strings().len(), 2);
+
+        // Add duplicate of first string - should return existing index
+        let idx3 = wb.add_shared_string("Hello");
+        assert_eq!(idx3, 0); // Same index as first "Hello"
+        assert_eq!(wb.shared_strings().len(), 2); // No new string added
+
+        // Add another duplicate
+        let idx4 = wb.add_shared_string("World");
+        assert_eq!(idx4, 1); // Same index as first "World"
+        assert_eq!(wb.shared_strings().len(), 2); // Still only 2 strings
+
+        // Verify the actual strings
+        assert_eq!(wb.shared_strings()[0], "Hello");
+        assert_eq!(wb.shared_strings()[1], "World");
+    }
+
+    #[test]
+    fn test_add_shared_string_with_string_type() {
+        let mut wb = Workbook::new();
+
+        // Test with String type
+        let idx1 = wb.add_shared_string(String::from("Test"));
+        let idx2 = wb.add_shared_string(String::from("Test"));
+        assert_eq!(idx1, idx2);
+        assert_eq!(wb.shared_strings().len(), 1);
     }
 
     #[test]
