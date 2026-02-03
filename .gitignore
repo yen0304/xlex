@@ -33,4 +33,4 @@ cobertura.xml
 
 # Environment
 .env
-.env.local
+.env.local*.xlsx

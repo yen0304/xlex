@@ -1,6 +1,6 @@
 {
   "name": "xlex",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "A streaming CLI Excel manipulation tool for developers and automation pipelines",
   "keywords": [
     "excel",
