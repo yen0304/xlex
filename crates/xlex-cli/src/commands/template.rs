@@ -795,10 +795,6 @@ fn value_to_string(v: &serde_json::Value) -> String {
     }
 }
 
-// =============================================================================
-// Advanced Template Engine
-// =============================================================================
-
 /// Template variables container supporting nested access and arrays.
 #[derive(Clone, Debug, Default)]
 pub struct TemplateVars {
@@ -1395,10 +1391,6 @@ mod tests {
         path
     }
 
-    // ==========================================================================
-    // TemplateVars tests
-    // ==========================================================================
-
     #[test]
     fn test_template_vars_new() {
         let vars = TemplateVars::new();
@@ -1505,10 +1497,6 @@ mod tests {
         assert_eq!(vars.get("existing"), Some("overwritten".to_string()));
     }
 
-    // ==========================================================================
-    // find_placeholders tests
-    // ==========================================================================
-
     #[test]
     fn test_find_placeholders_simple() {
         let result = find_placeholders("Hello {{name}}!");
@@ -1538,10 +1526,6 @@ mod tests {
         let result = find_placeholders("{{#if show}}content{{/if}}");
         assert!(result.is_empty());
     }
-
-    // ==========================================================================
-    // apply_filter tests
-    // ==========================================================================
 
     #[test]
     fn test_filter_upper() {
@@ -1623,10 +1607,6 @@ mod tests {
         assert_eq!(apply_filter("value", "unknown_filter"), "value");
     }
 
-    // ==========================================================================
-    // evaluate_condition tests
-    // ==========================================================================
-
     #[test]
     fn test_evaluate_condition_equality() {
         let mut vars = TemplateVars::new();
@@ -1669,10 +1649,6 @@ mod tests {
         assert!(evaluate_condition("show", &vars));
         assert!(!evaluate_condition("hide", &vars));
     }
-
-    // ==========================================================================
-    // process_template_string tests
-    // ==========================================================================
 
     #[test]
     fn test_process_template_simple() {
@@ -1739,10 +1715,6 @@ mod tests {
         assert_eq!(result, "Visible");
     }
 
-    // ==========================================================================
-    // value_to_string tests
-    // ==========================================================================
-
     #[test]
     fn test_value_to_string() {
         assert_eq!(value_to_string(&serde_json::json!("hello")), "hello");
@@ -1751,10 +1723,6 @@ mod tests {
         assert_eq!(value_to_string(&serde_json::json!(true)), "true");
         assert_eq!(value_to_string(&serde_json::json!(null)), "");
     }
-
-    // ==========================================================================
-    // yaml_to_json tests
-    // ==========================================================================
 
     #[test]
     fn test_yaml_to_json_string() {
@@ -1784,9 +1752,7 @@ mod tests {
         assert_eq!(json, serde_json::json!(["a", "b", "c"]));
     }
 
-    // ==========================================================================
     // init() tests
-    // ==========================================================================
 
     #[test]
     fn test_init_report_template() {
@@ -1875,9 +1841,7 @@ mod tests {
         assert!(result.is_err()); // Should fail because file exists
     }
 
-    // ==========================================================================
     // list() tests
-    // ==========================================================================
 
     #[test]
     fn test_list_placeholders() {
@@ -1910,9 +1874,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // ==========================================================================
     // validate() tests
-    // ==========================================================================
 
     #[test]
     fn test_validate_generate_schema() {
@@ -1961,9 +1923,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // ==========================================================================
     // preview() tests
-    // ==========================================================================
 
     #[test]
     fn test_preview_with_defines() {
@@ -1991,9 +1951,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // ==========================================================================
     // create() tests
-    // ==========================================================================
 
     #[test]
     fn test_create_template_from_source() {
@@ -2066,9 +2024,7 @@ mod tests {
         assert!(!output.exists());
     }
 
-    // ==========================================================================
     // apply_single() tests
-    // ==========================================================================
 
     #[test]
     fn test_apply_single() {
@@ -2142,10 +2098,6 @@ mod tests {
         assert!(output.exists());
     }
 
-    // ==========================================================================
-    // load_template_vars tests
-    // ==========================================================================
-
     #[test]
     fn test_load_template_vars_json() {
         let dir = TempDir::new().unwrap();
@@ -2188,10 +2140,6 @@ mod tests {
         let vars = load_template_vars(Some(&vars_path), &["name=FromDefine".to_string()]).unwrap();
         assert_eq!(vars.get("name"), Some("FromDefine".to_string()));
     }
-
-    // ==========================================================================
-    // process_conditionals tests
-    // ==========================================================================
 
     #[test]
     fn test_process_conditionals_if_true() {
@@ -2238,9 +2186,7 @@ mod tests {
         assert_eq!(result, "");
     }
 
-    // ==========================================================================
     // resolve_value / resolve_number tests
-    // ==========================================================================
 
     #[test]
     fn test_resolve_value_quoted() {
@@ -2266,9 +2212,7 @@ mod tests {
         assert_eq!(resolve_number("3.14", &vars), Some(3.14));
     }
 
-    // ==========================================================================
     // run() integration tests
-    // ==========================================================================
 
     #[test]
     fn test_run_init_command() {
