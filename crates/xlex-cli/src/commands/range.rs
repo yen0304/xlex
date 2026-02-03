@@ -114,7 +114,7 @@ pub enum RangeCommand {
         font_size: Option<f64>,
         /// Text color (hex, e.g., FF0000)
         #[arg(long)]
-        color: Option<String>,
+        text_color: Option<String>,
         /// Background color (hex, e.g., FFFF00)
         #[arg(long)]
         bg_color: Option<String>,
@@ -273,7 +273,7 @@ pub fn run(args: &RangeArgs, global: &GlobalOptions) -> Result<()> {
             underline,
             font,
             font_size,
-            color,
+            text_color,
             bg_color,
             align,
             valign,
@@ -292,7 +292,7 @@ pub fn run(args: &RangeArgs, global: &GlobalOptions) -> Result<()> {
                 underline: *underline,
                 font: font.clone(),
                 font_size: *font_size,
-                color: color.clone(),
+                color: text_color.clone(),
                 bg_color: bg_color.clone(),
                 align: align.clone(),
                 valign: valign.clone(),
@@ -1973,7 +1973,7 @@ mod tests {
                 underline: false,
                 font: Some("Arial".to_string()),
                 font_size: Some(12.0),
-                color: Some("FF0000".to_string()),
+                text_color: Some("FF0000".to_string()),
                 bg_color: Some("FFFF00".to_string()),
                 align: Some("center".to_string()),
                 valign: Some("middle".to_string()),

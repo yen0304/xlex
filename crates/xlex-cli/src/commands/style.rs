@@ -819,11 +819,11 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let file_path = create_test_workbook(&temp_dir, "get_style.xlsx");
 
-        // New workbook has empty style registry, so get(0) will fail
-        // This is expected behavior
+        // After parsing cellXfs, workbooks typically have at least one style (index 0)
+        // So get(0) should succeed
         let result = get(&file_path, 0, &default_global());
-        // StyleNotFound is expected for a new workbook
-        assert!(result.is_err());
+        // Style 0 typically exists in any xlsx file with cellXfs
+        assert!(result.is_ok());
     }
 
     #[test]
