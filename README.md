@@ -88,6 +88,56 @@ xlex template apply template.xlsx output.xlsx -D name="John" -D date="2026-01-15
 xlex interactive
 ```
 
+## Session Mode
+
+For large files (>10MB), session mode loads the file once and keeps it in memory for faster repeated operations:
+
+```bash
+# Start a session
+xlex session report.xlsx
+
+# In session mode, the prompt changes to:
+session> help      # Show available commands
+session> info      # Show workbook information
+session> sheets    # List all sheets
+session> cell Sheet1 A1        # Get cell value
+session> cell Sheet1 B2:D5     # Get range values
+session> row Sheet1 1          # Get row values
+session> exit      # Exit session mode
+```
+
+**Benefits:**
+- File is loaded only once at session start
+- Subsequent commands execute instantly
+- Ideal for exploring large workbooks interactively
+- Supports JSON output with `--format json`
+
+**Example workflow:**
+```bash
+$ xlex session large_report.xlsx
+Loading workbook... Done (2.3s)
+
+Session Mode
+File: large_report.xlsx
+Sheets: 5
+
+session> sheets
+Sheets:
+  1. Summary
+  2. Data
+  3. Charts
+  4. Raw
+  5. Config
+
+session> cell Data A1:A10
+A1: Header
+A2: Value1
+...
+
+session> exit
+Goodbye!
+```
+
 ## Command Reference
 
 ### Workbook Operations

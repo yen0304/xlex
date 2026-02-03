@@ -39,6 +39,28 @@ xlex export csv report.xlsx -s Sheet1 > data.csv
 xlex import json data.json output.xlsx
 ```
 
+## Session Mode
+
+For large files (>10MB), session mode loads the file once and keeps it in memory for faster repeated operations:
+
+```bash
+# Start a session
+xlex session report.xlsx
+
+# In session mode:
+session> info      # Show workbook information
+session> sheets    # List all sheets
+session> cell Sheet1 A1        # Get cell value
+session> cell Sheet1 B2:D5     # Get range values
+session> row Sheet1 1          # Get row values
+session> exit      # Exit session mode
+```
+
+**Benefits:**
+- File is loaded only once at session start
+- Subsequent commands execute instantly
+- Ideal for exploring large workbooks interactively
+
 ## Documentation
 
 For full documentation, visit the [GitHub repository](https://github.com/yen0304/xlex).
