@@ -156,6 +156,9 @@ pub enum Commands {
     /// Start interactive mode (REPL)
     Interactive,
 
+    /// Start a session with a pre-loaded workbook (faster for large files)
+    Session(SessionArgs),
+
     /// Show examples for commands
     Examples(ExamplesArgs),
 
@@ -217,6 +220,13 @@ pub struct BatchArgs {
 pub struct AliasArgs {
     #[command(subcommand)]
     pub command: AliasCommand,
+}
+
+/// Session mode arguments.
+#[derive(Parser)]
+pub struct SessionArgs {
+    /// Path to Excel file to load
+    pub file: std::path::PathBuf,
 }
 
 #[derive(Subcommand)]
@@ -327,6 +337,7 @@ impl Cli {
             Commands::Alias(args) => run_alias(args, &self.global),
             Commands::Version => run_version(&self.global),
             Commands::Interactive => run_interactive(&self.global),
+            Commands::Session(args) => run_session(args, &self.global),
             Commands::Examples(args) => run_examples(args, &self.global),
             Commands::Man(args) => run_man(args, &self.global),
         }
@@ -995,6 +1006,269 @@ fn print_interactive_help() {
     println!("  sheet list test.xlsx");
     println!("  cell get test.xlsx A1");
     println!("  cell set test.xlsx A1 \"Hello World\"");
+}
+
+fn run_session(args: &SessionArgs, global: &GlobalOptions) -> Result<()> {
+    use colored::Colorize;
+    use std::io::{BufRead, Write};
+    use std::time::Instant;
+    use xlex_core::LazyWorkbook;
+
+    let file_path = &args.file;
+
+    // Load workbook once using lazy loading
+    if !global.quiet {
+        println!("{} {}...", "Loading".bold().cyan(), file_path.display());
+    }
+
+    let start = Instant::now();
+    let workbook = LazyWorkbook::open(file_path)
+        .map_err(|e| anyhow::anyhow!("Failed to open workbook: {}", e))?;
+    let load_time = start.elapsed();
+
+    if !global.quiet {
+        println!(
+            "{} in {:.2}s",
+            "Loaded".bold().green(),
+            load_time.as_secs_f64()
+        );
+        println!();
+        println!("{}", "Session Mode".bold().cyan());
+        println!(
+            "Type {} for help, {} to exit",
+            "help".green(),
+            "exit".green()
+        );
+        println!();
+    }
+
+    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout();
+
+    loop {
+        print!("{} ", "session>".bold().yellow());
+        stdout.flush()?;
+
+        let mut line = String::new();
+        if stdin.lock().read_line(&mut line)? == 0 {
+            break; // EOF
+        }
+
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.is_empty() {
+            continue;
+        }
+
+        let cmd = parts[0].to_lowercase();
+        let args = &parts[1..];
+
+        match cmd.as_str() {
+            "exit" | "quit" | "q" => {
+                if !global.quiet {
+                    println!("Goodbye!");
+                }
+                break;
+            }
+            "help" | "?" => {
+                print_session_help();
+            }
+            "info" => {
+                run_session_info(&workbook, global);
+            }
+            "sheets" | "sheet" => {
+                if args.first().copied() == Some("list") || args.is_empty() {
+                    run_session_sheets(&workbook, global);
+                } else {
+                    eprintln!("{}: unknown sheet subcommand", "error".red());
+                    eprintln!("Use: sheets, sheet list");
+                }
+            }
+            "cell" => {
+                if args.len() < 2 {
+                    eprintln!("{}: usage: cell <sheet> <ref>", "error".red());
+                    eprintln!("Example: cell Sheet1 A1");
+                } else {
+                    run_session_cell(&workbook, args[0], args[1], global);
+                }
+            }
+            "row" => {
+                if args.len() < 2 {
+                    eprintln!("{}: usage: row <sheet> <number>", "error".red());
+                    eprintln!("Example: row Sheet1 1");
+                } else {
+                    match args[1].parse::<u32>() {
+                        Ok(row_num) => run_session_row(&workbook, args[0], row_num, global),
+                        Err(_) => eprintln!("{}: invalid row number", "error".red()),
+                    }
+                }
+            }
+            _ => {
+                eprintln!("{}: unknown command '{}'", "error".red(), cmd);
+                eprintln!("Type 'help' for available commands");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn print_session_help() {
+    use colored::Colorize;
+
+    println!("{}", "Session Mode Commands:".bold());
+    println!("  {}       - Show this help", "help".cyan());
+    println!("  {}       - Exit session mode", "exit".cyan());
+    println!();
+    println!("{}", "Workbook Commands:".bold());
+    println!("  {}           - Show workbook information", "info".cyan());
+    println!("  {}         - List all sheets", "sheets".cyan());
+    println!("  {}  - Get cell value", "cell <sheet> <ref>".cyan());
+    println!("  {} - Get row values", "row <sheet> <number>".cyan());
+    println!();
+    println!("{}", "Examples:".bold());
+    println!("  info");
+    println!("  sheets");
+    println!("  cell Sheet1 A1");
+    println!("  cell Sheet1 B2:D5");
+    println!("  row Sheet1 1");
+}
+
+fn run_session_info(workbook: &xlex_core::LazyWorkbook, global: &GlobalOptions) {
+    use colored::Colorize;
+
+    let sheets = workbook.sheet_names();
+
+    if global.format == OutputFormat::Json {
+        let json = serde_json::json!({
+            "sheet_count": sheets.len(),
+            "sheets": sheets,
+        });
+        println!("{}", serde_json::to_string_pretty(&json).unwrap());
+    } else {
+        println!("{}: {}", "Sheet count".bold(), sheets.len());
+        println!("{}: {}", "Sheets".bold(), sheets.join(", "));
+    }
+}
+
+fn run_session_sheets(workbook: &xlex_core::LazyWorkbook, global: &GlobalOptions) {
+    use colored::Colorize;
+
+    let sheets = workbook.sheet_names();
+
+    if global.format == OutputFormat::Json {
+        let json = serde_json::json!({
+            "sheets": sheets,
+        });
+        println!("{}", serde_json::to_string_pretty(&json).unwrap());
+    } else {
+        println!("{}", "Sheets:".bold());
+        for (i, name) in sheets.iter().enumerate() {
+            println!("  {}. {}", i + 1, name.cyan());
+        }
+    }
+}
+
+fn run_session_cell(
+    workbook: &xlex_core::LazyWorkbook,
+    sheet_name: &str,
+    cell_ref_str: &str,
+    global: &GlobalOptions,
+) {
+    use colored::Colorize;
+    use xlex_core::CellRef;
+
+    let cell_ref = match CellRef::parse(cell_ref_str) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!(
+                "{}: invalid cell reference '{}': {}",
+                "error".red(),
+                cell_ref_str,
+                e
+            );
+            return;
+        }
+    };
+
+    match workbook.read_cell(sheet_name, &cell_ref) {
+        Ok(Some(value)) => {
+            if global.format == OutputFormat::Json {
+                let json = serde_json::json!({
+                    "sheet": sheet_name,
+                    "cell": cell_ref_str,
+                    "value": value.to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json).unwrap());
+            } else {
+                println!("{}", value);
+            }
+        }
+        Ok(None) => {
+            if global.format == OutputFormat::Json {
+                let json = serde_json::json!({
+                    "sheet": sheet_name,
+                    "cell": cell_ref_str,
+                    "value": null,
+                });
+                println!("{}", serde_json::to_string_pretty(&json).unwrap());
+            } else {
+                println!("(empty)");
+            }
+        }
+        Err(e) => {
+            eprintln!("{}: {}", "error".red(), e);
+        }
+    }
+}
+
+fn run_session_row(
+    workbook: &xlex_core::LazyWorkbook,
+    sheet_name: &str,
+    row_num: u32,
+    global: &GlobalOptions,
+) {
+    use colored::Colorize;
+
+    // Stream rows and find the one we want
+    match workbook.stream_rows(sheet_name) {
+        Ok(rows) => {
+            let mut found = false;
+            for row in rows {
+                if row.row_number == row_num {
+                    found = true;
+                    if global.format == OutputFormat::Json {
+                        let cells_map: std::collections::HashMap<String, String> = row
+                            .cells
+                            .iter()
+                            .map(|(cell_ref, value)| (cell_ref.to_string(), value.to_string()))
+                            .collect();
+                        let json = serde_json::json!({
+                            "sheet": sheet_name,
+                            "row": row_num,
+                            "cells": cells_map,
+                        });
+                        println!("{}", serde_json::to_string_pretty(&json).unwrap());
+                    } else {
+                        let values: Vec<String> =
+                            row.cells.iter().map(|(_, v)| v.to_string()).collect();
+                        println!("{}", values.join("\t"));
+                    }
+                    break;
+                }
+            }
+            if !found {
+                eprintln!("{}: row {} not found", "error".red(), row_num);
+            }
+        }
+        Err(e) => {
+            eprintln!("{}: {}", "error".red(), e);
+        }
+    }
 }
 
 fn run_examples(args: &ExamplesArgs, _global: &GlobalOptions) -> Result<()> {
