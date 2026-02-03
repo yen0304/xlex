@@ -15,16 +15,43 @@ pub struct InfoArgs {
     pub file: std::path::PathBuf,
 }
 
+/// Threshold for recommending session mode (100 MB)
+const SESSION_RECOMMEND_SIZE: u64 = 100 * 1024 * 1024;
+
+/// Format file size in human-readable format.
+fn format_file_size(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+
+    if bytes >= GB {
+        format!("{:.1} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{} bytes", bytes)
+    }
+}
+
 /// Display workbook information.
 pub fn info(args: &InfoArgs, global: &GlobalOptions) -> Result<()> {
+    // Get file size before opening
+    let file_size = std::fs::metadata(&args.file).map(|m| m.len()).unwrap_or(0);
+    let session_recommended = file_size >= SESSION_RECOMMEND_SIZE;
+
     let workbook = Workbook::open(&args.file)?;
     let props = workbook.properties();
 
     if global.format == OutputFormat::Json {
         let json = serde_json::json!({
             "file": args.file.display().to_string(),
+            "fileSize": file_size,
+            "fileSizeFormatted": format_file_size(file_size),
             "sheets": workbook.sheet_names(),
             "sheetCount": workbook.sheet_count(),
+            "sessionRecommended": session_recommended,
             "properties": {
                 "title": props.title,
                 "subject": props.subject,
@@ -36,7 +63,12 @@ pub fn info(args: &InfoArgs, global: &GlobalOptions) -> Result<()> {
         });
         println!("{}", serde_json::to_string_pretty(&json)?);
     } else {
-        println!("{}: {}", "File".bold(), args.file.display());
+        println!(
+            "{}: {} ({})",
+            "File".bold(),
+            args.file.display(),
+            format_file_size(file_size)
+        );
         println!("{}: {}", "Sheets".bold(), workbook.sheet_count());
 
         println!("\n{}:", "Sheet Names".bold());
@@ -67,6 +99,17 @@ pub fn info(args: &InfoArgs, global: &GlobalOptions) -> Result<()> {
             if let Some(ref keywords) = props.keywords {
                 println!("  {}: {}", "Keywords".cyan(), keywords);
             }
+        }
+
+        // Show session mode recommendation for large files
+        if session_recommended && !global.quiet {
+            println!();
+            println!(
+                "{} This file is large ({}). For multiple operations, consider using session mode:",
+                "💡".yellow(),
+                format_file_size(file_size).yellow()
+            );
+            println!("    {} xlex session {}", "$".dimmed(), args.file.display());
         }
     }
 
