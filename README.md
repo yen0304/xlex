@@ -44,12 +44,6 @@ npm install -g xlex
 npx xlex info report.xlsx
 ```
 
-### Cargo
-
-```bash
-cargo install xlex-cli
-```
-
 ### From Source
 
 ```bash
