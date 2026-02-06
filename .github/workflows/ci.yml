@@ -103,3 +103,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Check MSRV
         run: cargo check --locked --all-features --workspace
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      - name: Security audit
+        run: cargo audit
