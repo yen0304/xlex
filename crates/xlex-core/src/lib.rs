@@ -31,6 +31,19 @@
 //! println!("A1 = {:?}", cell);
 //! ```
 
+// Clippy lints
+#![warn(clippy::all)]
+#![deny(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::module_name_repetitions,
+    clippy::must_use_candidate,
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    // Allow unwrap/expect in tests
+    clippy::unwrap_used,
+    clippy::expect_used
+)]
+
 pub mod cell;
 pub mod error;
 pub mod lazy;
