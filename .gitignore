@@ -36,3 +36,9 @@ cobertura.xml
 .env.local*.xlsx
 
 *.xlsx
+# GitHub Copilot/Claude prompts and skills (local only)
+.github/prompts/
+.github/skills/
+
+# Claude local config
+.claude/
