@@ -1,0 +1,41 @@
+[package]
+name = "xlex-mcp"
+description = "MCP server for xlex Excel manipulation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "xlex_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "xlex-mcp"
+path = "src/main.rs"
+
+[dependencies]
+xlex-core = { path = "../xlex-core" }
+
+# MCP
+rmcp = { version = "0.14", features = ["server", "transport-io"] }
+schemars = "1.0"
+
+# Async
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# CLI
+clap = { workspace = true }
+
+# Utils
+uuid = { workspace = true }
+anyhow = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

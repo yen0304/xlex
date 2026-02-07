@@ -131,6 +131,10 @@ session> exit
 Goodbye!
 ```
 
+## MCP Server
+
+xlex includes an MCP server (`xlex-mcp`) that lets AI assistants like Claude read, write, and manipulate Excel files. See the [xlex-mcp README](crates/xlex-mcp/README.md) for installation and configuration details.
+
 ## Command Reference
 
 ### Workbook Operations

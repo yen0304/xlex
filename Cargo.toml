@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/xlex-core",
     "crates/xlex-cli",
+    "crates/xlex-mcp",
 ]
 
 [workspace.package]

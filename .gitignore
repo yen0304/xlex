@@ -42,3 +42,6 @@ cobertura.xml
 
 # Claude local config
 .claude/
+
+.cursor/
+openspec/config.yaml
