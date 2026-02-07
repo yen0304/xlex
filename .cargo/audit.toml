@@ -1,0 +1,11 @@
+# cargo-audit configuration
+# https://github.com/rustsec/rustsec/tree/main/cargo-audit
+
+[advisories]
+# Advisories to ignore (temporarily, with justification)
+ignore = [
+    # time: DoS via Stack Exhaustion - fix requires time >=0.3.47 which needs Rust 1.88+
+    # time is a transitive dependency via zip. Will resolve when MSRV can be upgraded to 1.88+
+    # or when zip drops the time dependency.
+    "RUSTSEC-2026-0009",
+]

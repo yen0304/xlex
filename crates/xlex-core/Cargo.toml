@@ -17,6 +17,7 @@ parallel = ["rayon"]
 [dependencies]
 zip = { workspace = true }
 quick-xml = { workspace = true }
+time = { workspace = true }  # Pin transitive dep (via zip) for MSRV 1.80 compatibility
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

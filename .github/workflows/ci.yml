@@ -95,14 +95,36 @@ jobs:
           fail_ci_if_error: false
 
   msrv:
-    name: Minimum Supported Rust Version
+    name: MSRV (core & cli) - Rust 1.80
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.80.0
       - uses: Swatinem/rust-cache@v2
-      - name: Check MSRV
-        run: cargo check --locked --all-features --workspace
+      - name: Exclude xlex-mcp from workspace (requires Rust 1.85+)
+        run: sed -i '/"crates\/xlex-mcp",/d' Cargo.toml
+      - name: Generate MSRV-compatible lockfile
+        run: |
+          cargo generate-lockfile
+          # Pin transitive deps to MSRV 1.80-compatible versions
+          cargo update -p indexmap --precise 2.7.1
+          cargo update -p pest --precise 2.7.15
+          cargo update -p pest_derive --precise 2.7.15
+          cargo update -p pest_generator --precise 2.7.15
+          cargo update -p pest_meta --precise 2.7.15
+          cargo update -p crc --precise 3.2.1
+      - name: Check MSRV for core & cli
+        run: cargo check --all-features -p xlex-core -p xlex-cli
+
+  msrv-mcp:
+    name: MSRV (mcp) - Rust 1.85
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Check MSRV for mcp
+        run: cargo check --all-features -p xlex-mcp
 
   security:
     name: Security Audit
