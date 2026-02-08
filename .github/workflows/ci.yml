@@ -107,11 +107,12 @@ jobs:
         run: |
           cargo generate-lockfile
           # Pin transitive deps to MSRV 1.80-compatible versions
-          cargo update -p indexmap --precise 2.7.1
-          cargo update -p pest --precise 2.7.15
+          # Order matters: downgrade pest consumers before pest itself
           cargo update -p pest_derive --precise 2.7.15
           cargo update -p pest_generator --precise 2.7.15
           cargo update -p pest_meta --precise 2.7.15
+          cargo update -p pest --precise 2.7.15
+          cargo update -p indexmap --precise 2.7.1
           cargo update -p crc --precise 3.2.1
       - name: Check MSRV for core & cli
         run: cargo check --all-features -p xlex-core -p xlex-cli
