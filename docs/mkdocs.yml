@@ -2,10 +2,15 @@ site_name: XLEX Documentation
 site_description: CLI-first streaming Excel manipulation tool for developers
 site_author: yen0304
 site_url: https://yen0304.github.io/xlex
+docs_dir: .
 
 repo_name: yen0304/xlex
 repo_url: https://github.com/yen0304/xlex
 edit_uri: edit/main/docs/
+
+validation:
+  nav:
+    not_in_nav: info
 
 theme:
   name: material
