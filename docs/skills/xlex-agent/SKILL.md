@@ -74,7 +74,19 @@ xlex range border data.xlsx Sheet1 A1:D10 --style thin --border-color 000000
 xlex style freeze data.xlsx Sheet1 --rows 1      # freeze header row
 ```
 
-### 6. Import / Export
+### 6. Search across sheets
+
+Global search — like Ctrl+F in Excel. Searches all sheets by default.
+
+```bash
+xlex search data.xlsx "revenue"                         # case-insensitive across all sheets
+xlex search data.xlsx "error" -s Sheet1                  # restrict to one sheet
+xlex search data.xlsx "^\d{4}-" -r                       # regex: find date-like patterns
+xlex search data.xlsx "total" -c B                       # only search column B
+xlex search data.xlsx "keyword" -n 10 -f json            # first 10 results as JSON
+```
+
+### 7. Import / Export
 
 ```bash
 xlex export csv  data.xlsx output.csv -s Sheet1
@@ -84,7 +96,7 @@ xlex import csv  input.csv output.xlsx --header
 xlex convert input.csv output.xlsx                 # auto-detect by extension
 ```
 
-### 7. Templates
+### 8. Templates
 
 `{{placeholder}}` syntax for variable substitution — invoices, reports, batch documents.
 

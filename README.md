@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>A streaming CLI Excel manipulation tool for developers and automation pipelines.</strong>
+  <strong>A CLI Excel tool designed for AI agents — let Copilot, Cursor, Claude and other coding agents read, write, and manipulate Excel files.</strong>
 </p>
 
 <p align="center">
@@ -16,14 +16,23 @@
   <a href="https://blog.rust-lang.org/2024/07/25/Rust-1.80.0.html"><img src="https://img.shields.io/badge/MSRV-1.80-blue.svg" alt="MSRV"></a>
 </p>
 
+<p align="center">
+  English | <a href="README.zh-TW.md">繁體中文</a>
+</p>
+
+## Why xlex?
+
+AI coding agents (Copilot, Cursor, Claude Code, etc.) can run CLI commands but can't open Excel files directly. xlex bridges this gap — agents use simple CLI commands to read, write, style, and transform `.xlsx` files without any SDK or library integration.
+
 ## Features
 
+- **Agent-Friendly**: Structured JSON output, deterministic exit codes, dry-run support
+- **Skill Files Included**: Ready-to-use [agent skill files](docs/skills/xlex-agent/) so agents know every command
 - **Streaming Architecture**: Handle files up to 200MB without memory exhaustion
-- **CLI-First Design**: Composable commands for shell pipelines
 - **Multiple Output Formats**: Text, JSON, CSV, NDJSON
 - **Template System**: Variable substitution with `{{placeholder}}` syntax
 - **Import/Export**: CSV, JSON, YAML, TSV, Markdown support
-- **Cross-Platform**: macOS, Linux, Windows binaries
+- **Cross-Platform**: macOS, Linux, Windows — single binary, zero dependencies
 
 ## Installation
 
@@ -133,9 +142,29 @@ Goodbye!
 
 ## AI Agent Integration
 
-xlex includes an agent skill file (`.github/skills/xlex-agent/SKILL.md`) that teaches AI coding agents how to manipulate Excel files using the CLI. Compatible with any agent that supports skill files (Claude, GitHub Copilot, etc.).
+xlex ships with **agent skill files** that teach AI coding agents the full command set. Drop them into your project and your agent instantly knows how to manipulate Excel files.
 
-The skill covers all operations — read, write, create, style, formula, import/export, templates — using the same CLI commands you'd use manually. No separate server or dependencies needed.
+```
+docs/skills/xlex-agent/
+├── SKILL.md                    # Core overview — start here
+└── references/
+    ├── commands.md             # Complete CLI command reference
+    └── examples.md             # Real-world workflow examples
+```
+
+**Compatible agents**: GitHub Copilot, Cursor, Claude Code, Windsurf, or any agent that supports skill/instruction files.
+
+**How to use**: Copy `docs/skills/xlex-agent/` into your project. The agent will automatically discover and follow the skill files when working with Excel tasks.
+
+**What agents can do with xlex**:
+- Read/write cells, rows, columns, ranges
+- Create workbooks, manage sheets
+- Apply styles, formatting, conditional rules
+- Import/export CSV, JSON, YAML, Markdown
+- Process templates with variable substitution
+- Run formulas and calculations
+
+No MCP server, no SDK, no runtime — just CLI commands the agent calls via terminal.
 
 ## Command Reference
 

@@ -12,6 +12,7 @@ Real-world patterns for common Excel automation tasks. Each example shows a comp
 - [Multi-sheet dashboard](#multi-sheet-dashboard)
 - [Safe editing workflow](#safe-editing-workflow)
 - [Bulk data entry](#bulk-data-entry)
+- [Search and find data](#search-and-find-data)
 
 ---
 
@@ -284,4 +285,31 @@ EOF
 
 # Option 3: Import from existing data file
 xlex import json records.json data.xlsx -s Imported
+```
+
+## Search and find data
+
+Find specific values across an entire workbook — like Ctrl+F in Excel.
+
+```bash
+# 1. Basic search across all sheets
+xlex search report.xlsx "revenue"
+
+# 2. JSON output for programmatic use
+xlex search report.xlsx "error" -f json
+
+# 3. Restrict to a specific sheet
+xlex search report.xlsx "total" -s Summary
+
+# 4. Search only in a specific column
+xlex search report.xlsx "Alice" -c A
+
+# 5. Regex search for patterns (e.g., dates like 2026-XX-XX)
+xlex search report.xlsx "^2026-\d{2}-\d{2}" -r
+
+# 6. Case-sensitive search with limited results
+xlex search report.xlsx "ERROR" --case-sensitive -n 5
+
+# 7. Combine with other tools for pipeline workflows
+xlex search data.xlsx "OVERDUE" -f json | jq '.matches[].cell'
 ```

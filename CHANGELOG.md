@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-03-06
+
+### Added
+
+- **Global search**: New `xlex search` command — search text across all sheets like Ctrl+F in Excel
+  - Supports case-insensitive (default), case-sensitive, and regex matching
+  - Filter by sheet (`-s`) or column (`-c`), limit results (`-n`)
+  - All output formats: text, json, csv, ndjson
+- **Session mode search**: `search` / `find` command now available in session mode
+- **AGENTS.md**: Added session mode rule and npm README sync rule
+
+### Fixed
+
+- **CI benchmark**: Changed `criterionrs` to `cargo` tool for `github-action-benchmark` (tool name was removed upstream)
+
+### Removed
+
+- **Shell test scripts**: Removed unused manual test scripts (`cli_test.sh`, `generate_fixtures.sh`, `perf_validation.sh`, `test_styles_demo.sh`)
+
+### Changed
+
+- **npm README**: Expanded with search examples, more command categories, session mode search, global options table
+- **Agent skill docs**: Updated `commands.md`, `SKILL.md`, `examples.md` with search documentation and session mode commands
+
 ## [0.3.0] - 2026-03-06
 
 ### Removed

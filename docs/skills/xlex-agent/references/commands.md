@@ -13,6 +13,7 @@ Complete reference for all xlex CLI commands. Organized by domain.
 - [Style](#style)
 - [Formula](#formula)
 - [Template](#template)
+- [Search](#search)
 - [Import](#import)
 - [Export](#export)
 - [Utility](#utility)
@@ -235,6 +236,21 @@ xlex template create   <source> <output> [-p cell=name]  # Create template from 
 xlex template preview  <template> [--vars file] [-D key=value]
 ```
 
+## Search
+
+Global search across all sheets — like Ctrl+F in Excel.
+
+```bash
+xlex search <file> <pattern> [-s sheet] [-c column] [--case-sensitive] [-r] [-n max]
+    -s, --sheet <name>       # Restrict to a specific sheet
+    -c, --column <col>       # Restrict to a specific column (e.g., A, B, AA)
+    --case-sensitive          # Case-sensitive matching (default: case-insensitive)
+    -r, --regex               # Use regex pattern matching
+    -n, --max-results <n>     # Limit results (0 = unlimited, default: 0)
+```
+
+---
+
 ## Import
 
 ```bash
@@ -276,4 +292,18 @@ xlex man [--output-dir <dir>] [--all]          # Generate man pages
 xlex version                                   # Version information
 xlex interactive                               # Start REPL mode
 xlex session <file>                            # Interactive session (file preloaded in memory)
+```
+
+### Session mode commands
+
+Inside `xlex session`, the following commands are available:
+
+```
+info                      # Show workbook information
+sheets                    # List all sheets
+cell <sheet> <ref>        # Get cell value
+row <sheet> <number>      # Get row values
+search <pattern> [sheet]  # Search across all sheets (or one sheet)
+help                      # Show help
+exit                      # Exit session
 ```

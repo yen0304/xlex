@@ -1125,6 +1125,17 @@ fn run_session(args: &SessionArgs, global: &GlobalOptions) -> Result<()> {
                     }
                 }
             }
+            "search" | "find" => {
+                if args.is_empty() {
+                    eprintln!("{}: usage: search <pattern> [sheet]", "error".red());
+                    eprintln!("Example: search revenue");
+                    eprintln!("Example: search error Sheet1");
+                } else {
+                    let pattern = args[0];
+                    let sheet_filter = args.get(1).copied();
+                    run_session_search(&workbook, pattern, sheet_filter, global);
+                }
+            }
             _ => {
                 eprintln!("{}: unknown command '{}'", "error".red(), cmd);
                 eprintln!("Type 'help' for available commands");
@@ -1147,6 +1158,10 @@ fn print_session_help() {
     println!("  {}         - List all sheets", "sheets".cyan());
     println!("  {}  - Get cell value", "cell <sheet> <ref>".cyan());
     println!("  {} - Get row values", "row <sheet> <number>".cyan());
+    println!(
+        "  {} - Search across all sheets",
+        "search <pattern> [sheet]".cyan()
+    );
     println!();
     println!("{}", "Examples:".bold());
     println!("  info");
@@ -1154,6 +1169,8 @@ fn print_session_help() {
     println!("  cell Sheet1 A1");
     println!("  cell Sheet1 B2:D5");
     println!("  row Sheet1 1");
+    println!("  search revenue");
+    println!("  search error Sheet1");
 }
 
 fn run_session_info(workbook: &xlex_core::LazyWorkbook, global: &GlobalOptions) {
@@ -1286,6 +1303,98 @@ fn run_session_row(
         Err(e) => {
             eprintln!("{}: {}", "error".red(), e);
         }
+    }
+}
+
+fn run_session_search(
+    workbook: &xlex_core::LazyWorkbook,
+    pattern: &str,
+    sheet_filter: Option<&str>,
+    global: &GlobalOptions,
+) {
+    use colored::Colorize;
+
+    let sheets = workbook.sheet_names();
+    let search_sheets: Vec<&str> = if let Some(name) = sheet_filter {
+        if !workbook.has_sheet(name) {
+            eprintln!("{}: sheet '{}' not found", "error".red(), name);
+            return;
+        }
+        vec![name]
+    } else {
+        sheets.iter().map(|s| s.as_str()).collect()
+    };
+
+    let pattern_lower = pattern.to_lowercase();
+
+    #[derive(serde::Serialize)]
+    struct Match {
+        sheet: String,
+        cell: String,
+        value: String,
+    }
+
+    let mut matches: Vec<Match> = Vec::new();
+
+    for sheet_name in &search_sheets {
+        match workbook.stream_rows(sheet_name) {
+            Ok(rows) => {
+                for row in rows {
+                    for (cell_ref, cell_value) in &row.cells {
+                        let value = cell_value.to_string();
+                        if value.to_lowercase().contains(&pattern_lower) {
+                            matches.push(Match {
+                                sheet: sheet_name.to_string(),
+                                cell: cell_ref.to_a1(),
+                                value,
+                            });
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!(
+                    "{}: failed to read sheet '{}': {}",
+                    "error".red(),
+                    sheet_name,
+                    e
+                );
+            }
+        }
+    }
+
+    if global.format == OutputFormat::Json {
+        let json = serde_json::json!({
+            "pattern": pattern,
+            "count": matches.len(),
+            "matches": matches,
+        });
+        println!("{}", serde_json::to_string_pretty(&json).unwrap());
+    } else if matches.is_empty() {
+        println!(
+            "{}: no matches found for \"{}\"",
+            "search".yellow(),
+            pattern
+        );
+    } else {
+        println!(
+            "Found {} match{} for \"{}\":\n",
+            matches.len().to_string().green(),
+            if matches.len() == 1 { "" } else { "es" },
+            pattern.cyan()
+        );
+        let mut current_sheet = "";
+        for m in &matches {
+            if m.sheet != current_sheet {
+                if !current_sheet.is_empty() {
+                    println!();
+                }
+                println!("  {} {}", "Sheet:".bold(), m.sheet.bold());
+                current_sheet = &m.sheet;
+            }
+            println!("    {} = {}", m.cell.yellow(), m.value.dimmed());
+        }
+        println!();
     }
 }
 
