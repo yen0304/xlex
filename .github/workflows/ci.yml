@@ -142,9 +142,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run benchmarks
-        run: cargo bench -p xlex-core --bench benchmarks 2>&1 | tee output.txt
+        run: cargo bench -p xlex-core --bench benchmarks > output.txt 2>&1
         env:
           CARGO_TERM_COLOR: never
+      - name: Debug benchmark output
+        if: always()
+        run: |
+          echo "=== output.txt content (first 50 lines) ==="
+          head -50 output.txt || echo "output.txt not found"
+          echo "=== lines with time: ==="
+          grep "time:" output.txt || echo "no time: lines found"
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
