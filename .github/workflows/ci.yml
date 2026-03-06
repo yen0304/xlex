@@ -142,7 +142,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run benchmarks
-        run: cargo bench -p xlex-core 2>&1 | tee output.txt
+        run: cargo bench -p xlex-core --bench benchmarks 2>&1 | tee output.txt
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
