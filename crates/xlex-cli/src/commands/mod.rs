@@ -7,6 +7,7 @@ mod formula;
 mod import;
 mod range;
 mod row;
+mod search;
 mod sheet;
 mod style;
 mod template;
@@ -146,6 +147,10 @@ pub enum Commands {
 
     /// Convert between formats
     Convert(ConvertArgs),
+
+    // Search
+    /// Search for text across all sheets (like Ctrl+F in Excel)
+    Search(search::SearchArgs),
 
     // Utility commands
     /// Generate shell completion scripts
@@ -339,6 +344,9 @@ impl Cli {
             Commands::Export(args) => export::run(args, &self.global),
             Commands::Import(args) => import::run(args, &self.global),
             Commands::Convert(args) => run_convert(args, &self.global),
+
+            // Search
+            Commands::Search(args) => search::run(args, &self.global),
 
             // Utility
             Commands::Completion(args) => run_completion(args),
