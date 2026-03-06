@@ -113,6 +113,11 @@ jobs:
           cargo update -p pest --precise 2.7.15
           cargo update -p indexmap --precise 2.7.1
           cargo update -p crc --precise 3.2.1
+          # tempfile 3.16+ and uuid 1.13+ pull getrandom 0.4 (requires edition2024 / Rust 1.85+)
+          cargo update -p tempfile --precise 3.15.0
+          cargo update -p uuid --precise 1.12.1
+          # deflate64 0.1.10+ uses unbounded_shr (stabilized in Rust 1.82)
+          cargo update -p deflate64 --precise 0.1.9
       - name: Check MSRV for core & cli
         run: cargo check --all-features -p xlex-core -p xlex-cli
 
