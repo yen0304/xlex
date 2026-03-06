@@ -142,16 +142,28 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run benchmarks
-        run: cargo bench -p xlex-core --bench benchmarks > output.txt 2>&1
+        run: |
+          cargo bench -p xlex-core --bench benchmarks 2>&1 | tee raw_bench.txt
+          # Convert Criterion output to cargo bench format for github-action-benchmark
+          # Criterion: "name   time:   [low mid high]"  ->  "test name ... bench: mid ns/iter (+/- 0)"
+          python3 -c "
+          import re, sys
+          for line in open('raw_bench.txt'):
+              m = re.match(r'^(\S.*\S)\s+time:\s+\[.*?\s+([\d.]+)\s+(ns|µs|ms|s).*\]', line)
+              if m:
+                  name, val, unit = m.group(1), float(m.group(2)), m.group(3)
+                  ns = val * {'ns':1, 'µs':1000, 'ms':1000000, 's':1000000000}[unit]
+                  print(f'test {name} ... bench:  {int(ns)} ns/iter (+/- 0)')
+          " > output.txt
         env:
           CARGO_TERM_COLOR: never
       - name: Debug benchmark output
         if: always()
         run: |
-          echo "=== output.txt content (first 50 lines) ==="
-          head -50 output.txt || echo "output.txt not found"
-          echo "=== lines with time: ==="
-          grep "time:" output.txt || echo "no time: lines found"
+          echo "=== raw_bench.txt time lines ==="
+          grep "time:" raw_bench.txt | head -10 || echo "none"
+          echo "=== output.txt (converted) ==="
+          cat output.txt || echo "empty"
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
