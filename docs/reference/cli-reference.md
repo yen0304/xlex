@@ -264,7 +264,7 @@ See [Exit Codes Reference](exit-codes.md) for complete list.
 | `XLEX_QUIET` | Suppress output |
 | `NO_COLOR` | Standard no-color |
 
-See [Environment Variables Reference](environment-variables.md) for complete list.
+See `xlex --help` for the full list of supported environment variables.
 
 ## Examples
 
@@ -288,5 +288,4 @@ xlex template apply invoice-template.xlsx output.xlsx --data order.json
 ## See Also
 
 - [Getting Started](../getting-started/installation.md)
-- [Configuration File](config-file.md)
-- [Error Codes](error-codes.md)
+- [Exit Codes](exit-codes.md)

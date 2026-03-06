@@ -158,7 +158,6 @@ style:
 
 ## Next Steps
 
-- Learn about [Sheet Operations](../commands/sheet.md)
-- Explore [Cell Commands](../commands/cell.md)
-- Read about [Template Syntax](../reference/template-syntax.md)
-- Check [Pipeline Integration](../guides/pipelines.md)
+- See the full [CLI Reference](../reference/cli-reference.md)
+- Check [Exit Codes](../reference/exit-codes.md) for error handling
+- Explore [Library Usage](../development/library-usage.md) for Rust integration

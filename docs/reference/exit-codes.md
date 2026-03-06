@@ -314,5 +314,4 @@ xlex info nonexistent.xlsx --json-errors
 
 ## See Also
 
-- [Error Codes](error-codes.md) - Detailed error code reference
 - [CLI Reference](cli-reference.md) - Complete CLI documentation
