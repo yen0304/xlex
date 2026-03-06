@@ -141,10 +141,16 @@ check_path() {
 
 main() {
     echo ""
-    echo "╔═══════════════════════════════════════╗"
-    echo "║         XLEX Installer                ║"
-    echo "║   Excel CLI Tool for Developers       ║"
-    echo "╚═══════════════════════════════════════╝"
+    echo -e "${BLUE}"
+    echo '  ██╗  ██╗██╗     ███████╗██╗  ██╗'
+    echo '  ╚██╗██╔╝██║     ██╔════╝╚██╗██╔╝'
+    echo '   ╚███╔╝ ██║     █████╗   ╚███╔╝ '
+    echo '   ██╔██╗ ██║     ██╔══╝   ██╔██╗ '
+    echo '  ██╔╝ ██╗███████╗███████╗██╔╝ ██╗'
+    echo '  ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝'
+    echo -e "${NC}"
+    echo -e "  ${GREEN}⚡${NC} Excel CLI Tool for Developers"
+    echo -e "  ${YELLOW}─────────────────────────────────${NC}"
     echo ""
 
     detect_os

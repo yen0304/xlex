@@ -16,6 +16,7 @@ Complete reference for all xlex CLI commands. Organized by domain.
 - [Search](#search)
 - [Import](#import)
 - [Export](#export)
+- [Update](#update)
 - [Utility](#utility)
 
 ---
@@ -273,6 +274,18 @@ xlex export markdown <source> <dest> [-s sheet] [--all]
 xlex export ndjson   <source> <dest> [-s sheet] [--header] [--all]
 xlex export meta     <source> <dest>
 ```
+
+## Update
+
+```bash
+xlex update                                    # Update to latest version
+xlex update --check                            # Check for updates without installing
+xlex update --target v0.3.1                    # Update to a specific version
+xlex update --dry-run                          # Show what would happen
+xlex update --check -f json                    # Check in JSON format
+```
+
+---
 
 ## Utility
 

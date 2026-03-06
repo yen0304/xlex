@@ -104,6 +104,19 @@ session> exit      # Exit session mode
 - Subsequent commands execute instantly
 - Ideal for exploring large workbooks interactively
 
+## Updating
+
+```bash
+# Update to the latest version
+xlex update
+
+# Check for updates without installing
+xlex update --check
+
+# Update to a specific version
+xlex update --target v0.3.1
+```
+
 ## Global Options
 
 | Flag | Short | Effect |

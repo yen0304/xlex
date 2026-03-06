@@ -11,6 +11,7 @@ mod search;
 mod sheet;
 mod style;
 mod template;
+mod update;
 mod workbook;
 
 use anyhow::Result;
@@ -179,6 +180,9 @@ pub enum Commands {
 
     /// Generate man page
     Man(ManArgs),
+
+    /// Update xlex to the latest version
+    Update(update::UpdateArgs),
 }
 
 /// Examples arguments.
@@ -358,6 +362,7 @@ impl Cli {
             Commands::Session(args) => run_session(args, &self.global),
             Commands::Examples(args) => run_examples(args, &self.global),
             Commands::Man(args) => run_man(args, &self.global),
+            Commands::Update(args) => update::run(args, &self.global),
         }
     }
 }
