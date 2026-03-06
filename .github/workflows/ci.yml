@@ -157,13 +157,6 @@ jobs:
           " > output.txt
         env:
           CARGO_TERM_COLOR: never
-      - name: Debug benchmark output
-        if: always()
-        run: |
-          echo "=== raw_bench.txt time lines ==="
-          grep "time:" raw_bench.txt | head -10 || echo "none"
-          echo "=== output.txt (converted) ==="
-          cat output.txt || echo "empty"
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
