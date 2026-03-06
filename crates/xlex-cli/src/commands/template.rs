@@ -1719,7 +1719,7 @@ mod tests {
     fn test_value_to_string() {
         assert_eq!(value_to_string(&serde_json::json!("hello")), "hello");
         assert_eq!(value_to_string(&serde_json::json!(42)), "42");
-        assert_eq!(value_to_string(&serde_json::json!(3.14)), "3.14");
+        assert_eq!(value_to_string(&serde_json::json!(1.23)), "1.23");
         assert_eq!(value_to_string(&serde_json::json!(true)), "true");
         assert_eq!(value_to_string(&serde_json::json!(null)), "");
     }
@@ -2209,7 +2209,7 @@ mod tests {
 
         assert_eq!(resolve_number("num", &vars), Some(42.0));
         assert_eq!(resolve_number("100", &vars), Some(100.0));
-        assert_eq!(resolve_number("3.14", &vars), Some(3.14));
+        assert_eq!(resolve_number("1.23", &vars), Some(1.23));
     }
 
     // run() integration tests

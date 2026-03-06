@@ -3,11 +3,10 @@ resolver = "2"
 members = [
     "crates/xlex-core",
     "crates/xlex-cli",
-    "crates/xlex-mcp",
 ]
 
 [workspace.package]
-version = "0.2.4"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.80"  # MSRV - also update .github/workflows/ci.yml
 authors = ["yen0304"]
@@ -36,9 +35,6 @@ indicatif = "0.17"
 console = "0.15"
 dialoguer = "0.11"
 
-# Async / IO
-tokio = { version = "1.0", features = ["full"] }
-
 # Utils
 thiserror = "1.0"
 anyhow = "1.0"
@@ -56,6 +52,7 @@ rayon = "1.10"
 # Testing
 tempfile = "3.10"
 criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.6"
 
 # Dev tools
 cargo-husky = { version = "1", features = ["precommit-hook", "run-cargo-fmt", "run-cargo-clippy", "run-cargo-test"] }

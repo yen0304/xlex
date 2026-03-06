@@ -63,14 +63,14 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf ../../../${{ matrix.name }}.tar.gz xlex xlex-mcp
+          tar czf ../../../${{ matrix.name }}.tar.gz xlex
           cd ../../..
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          7z a ../../../${{ matrix.name }}.zip xlex.exe xlex-mcp.exe
+          7z a ../../../${{ matrix.name }}.zip xlex.exe
           cd ../../..
 
       - name: Upload artifact

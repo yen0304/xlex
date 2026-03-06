@@ -14,8 +14,8 @@ fn create_test_workbook(rows: usize) -> (TempDir, PathBuf) {
 
     let mut workbook = Workbook::new();
     if let Some(sheet) = workbook.get_sheet_mut("Sheet1") {
-        for i in 0..rows {
-            let cell_ref = CellRef::new(0, i as u32); // Column A
+        for i in 1..=rows {
+            let cell_ref = CellRef::new(1, i as u32); // Column A (1-indexed)
             sheet.set_cell(cell_ref, CellValue::String(format!("Value {}", i)));
         }
     }
@@ -54,7 +54,7 @@ fn bench_cell_get(c: &mut Criterion) {
     c.bench_function("cell_get_single", |b| {
         b.iter(|| {
             let sheet = wb.get_sheet("Sheet1").unwrap();
-            let cell = sheet.get_cell(&CellRef::new(0, 500));
+            let cell = sheet.get_cell(&CellRef::new(1, 500));
             black_box(cell)
         })
     });
@@ -69,7 +69,7 @@ fn bench_cell_set(c: &mut Criterion) {
             |mut wb| {
                 wb.set_cell(
                     "Sheet1",
-                    CellRef::new(0, 50),
+                    CellRef::new(1, 50),
                     CellValue::String("Updated".to_string()),
                 )
                 .unwrap();
@@ -94,9 +94,9 @@ fn bench_row_append(c: &mut Criterion) {
             b.iter(|| {
                 let mut wb = Workbook::open(&path).unwrap();
                 if let Some(sheet) = wb.get_sheet_mut("Sheet1") {
-                    for i in 0..size {
+                    for i in 1..=size {
                         sheet.set_cell(
-                            CellRef::new(0, i as u32),
+                            CellRef::new(1, i as u32),
                             CellValue::String(format!("Row {}", i)),
                         );
                     }
@@ -118,8 +118,8 @@ fn bench_range_read(c: &mut Criterion) {
             let _range = Range::parse("A1:A100").unwrap();
             // Read individual cells in range
             let mut cells = Vec::with_capacity(100);
-            for row in 0..100u32 {
-                let cell = sheet.get_cell(&CellRef::new(0, row));
+            for row in 1..=100u32 {
+                let cell = sheet.get_cell(&CellRef::new(1, row));
                 cells.push(cell);
             }
             black_box(cells)
@@ -137,9 +137,9 @@ fn bench_workbook_save(c: &mut Criterion) {
 
             let mut workbook = Workbook::new();
             if let Some(sheet) = workbook.get_sheet_mut("Sheet1") {
-                for i in 0..rows {
+                for i in 1..=rows {
                     sheet.set_cell(
-                        CellRef::new(0, i as u32),
+                        CellRef::new(1, i as u32),
                         CellValue::String(format!("Value {}", i)),
                     );
                 }
@@ -277,7 +277,10 @@ fn bench_style_registry(c: &mut Criterion) {
         if let Some(sheet) = wb.get_sheet_mut("Sheet1") {
             for row in 0..100u32 {
                 for col in 0..10u32 {
-                    sheet.set_cell(CellRef::new(col, row), CellValue::String(format!("Cell")));
+                    sheet.set_cell(
+                        CellRef::new(col + 1, row + 1),
+                        CellValue::String("Cell".to_string()),
+                    );
                 }
             }
         }
@@ -291,7 +294,7 @@ fn bench_style_registry(c: &mut Criterion) {
             if let Some(sheet) = wb.get_sheet_mut("Sheet1") {
                 for row in 0..100u32 {
                     for col in 0..10u32 {
-                        sheet.set_cell_style(&CellRef::new(col, row), Some(style_id));
+                        sheet.set_cell_style(&CellRef::new(col + 1, row + 1), Some(style_id));
                     }
                 }
             }

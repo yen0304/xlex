@@ -131,9 +131,11 @@ session> exit
 Goodbye!
 ```
 
-## MCP Server
+## AI Agent Integration
 
-xlex includes an MCP server (`xlex-mcp`) that lets AI assistants like Claude read, write, and manipulate Excel files. See the [xlex-mcp README](crates/xlex-mcp/README.md) for installation and configuration details.
+xlex includes an agent skill file (`.github/skills/xlex-agent/SKILL.md`) that teaches AI coding agents how to manipulate Excel files using the CLI. Compatible with any agent that supports skill files (Claude, GitHub Copilot, etc.).
+
+The skill covers all operations — read, write, create, style, formula, import/export, templates — using the same CLI commands you'd use manually. No separate server or dependencies needed.
 
 ## Command Reference
 

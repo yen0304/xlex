@@ -827,6 +827,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_parse_auto_value_number() {
         assert_eq!(parse_auto_value("42"), CellValue::Number(42.0));
         assert_eq!(parse_auto_value("3.14"), CellValue::Number(3.14));
@@ -1500,6 +1501,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_parse_auto_value_negative_decimal() {
         assert_eq!(parse_auto_value("-3.14"), CellValue::Number(-3.14));
     }

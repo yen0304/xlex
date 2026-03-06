@@ -6,6 +6,52 @@ use std::str::FromStr;
 
 use crate::error::{XlexError, XlexResult};
 
+/// Converts an Excel serial number to a human-readable date string.
+///
+/// Excel serial numbers count days since 1899-12-30 (with the Lotus 1-2-3
+/// leap year bug where 1900-02-29 is treated as valid).
+/// If the serial includes a fractional part, time is also included.
+fn excel_serial_to_date_string(serial: f64) -> String {
+    if serial < 0.0 {
+        return format!("{}", serial);
+    }
+
+    // Excel epoch: 1899-12-30 (day 0)
+    // Note: Excel incorrectly treats 1900 as a leap year (Lotus 1-2-3 bug).
+    // Serial number 60 = 1900-02-29 (doesn't exist), 61 = 1900-03-01.
+    let days = serial.trunc() as i64;
+    let frac = serial.fract();
+
+    // Adjust for the Lotus 1-2-3 leap year bug
+    let adjusted_days = if days > 60 { days - 1 } else { days };
+
+    // Convert days since 1899-12-31 to a date
+    // Excel serial 1 = 1900-01-01, so base + serial = correct date (for serial <= 59)
+    // For serial > 60, subtract 1 to skip the phantom Feb 29, 1900
+    let base = chrono::NaiveDate::from_ymd_opt(1899, 12, 31);
+    let date = base.and_then(|d| d.checked_add_signed(chrono::Duration::days(adjusted_days)));
+
+    match date {
+        Some(d) => {
+            if frac.abs() < 1e-10 {
+                // Date only
+                d.format("%Y-%m-%d").to_string()
+            } else {
+                // Date + time
+                let total_seconds = (frac * 86400.0).round() as u32;
+                let hours = total_seconds / 3600;
+                let minutes = (total_seconds % 3600) / 60;
+                let seconds = total_seconds % 60;
+                let time = chrono::NaiveTime::from_hms_opt(hours, minutes, seconds)
+                    .unwrap_or(chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap_or_default());
+                let dt = d.and_time(time);
+                dt.format("%Y-%m-%d %H:%M:%S").to_string()
+            }
+        }
+        None => format!("{}", serial),
+    }
+}
+
 /// A reference to a cell in A1 notation.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CellRef {
@@ -211,7 +257,7 @@ impl CellValue {
             Self::Boolean(b) => if *b { "TRUE" } else { "FALSE" }.to_string(),
             Self::Formula { formula, .. } => format!("={}", formula),
             Self::Error(e) => e.to_string(),
-            Self::DateTime(serial) => format!("{}", serial), // TODO: Format as date
+            Self::DateTime(serial) => excel_serial_to_date_string(*serial),
         }
     }
 }
@@ -443,6 +489,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_cell_value_display() {
         assert_eq!(CellValue::Empty.to_display_string(), "");
         assert_eq!(CellValue::string("hello").to_display_string(), "hello");
@@ -455,10 +502,14 @@ mod tests {
             CellValue::Error(CellError::Value).to_display_string(),
             "#VALUE!"
         );
-        assert_eq!(CellValue::DateTime(44562.0).to_display_string(), "44562");
+        assert_eq!(
+            CellValue::DateTime(44562.0).to_display_string(),
+            "2022-01-01"
+        );
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_cell_value_number_display() {
         // Integer-like floats should display without decimals
         assert_eq!(CellValue::number(100.0).to_display_string(), "100");

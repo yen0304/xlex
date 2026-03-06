@@ -388,8 +388,8 @@ mod tests {
 
         // Parser should handle malformed XML somehow (may return error or empty)
         // The behavior depends on quick_xml's error handling
-        if result.is_ok() {
-            assert!(result.unwrap().is_empty());
+        if let Ok(strings) = result {
+            assert!(strings.is_empty());
         }
     }
 

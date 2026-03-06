@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-06
+
+### Removed
+
+- **MCP Server**: Removed `xlex-mcp` crate entirely — the MCP approach is replaced by agent skill files
+- **tokio dependency**: No longer needed without MCP server
+
+### Added
+
+- **Agent Skill**: New `docs/skills/xlex-agent/` with progressive disclosure structure
+  - `SKILL.md` — core workflows, loaded when skill triggers
+  - `references/commands.md` — complete CLI command reference (123 commands)
+  - `references/examples.md` — 8 real-world workflow examples
+- **Documentation coverage**: All 123 CLI commands now fully documented with correct flags
+
+### Fixed
+
+- **Clippy**: Resolved all clippy warnings (approx_constant, useless format!, is_ok+unwrap, default on unit struct)
+- **Skill accuracy**: Fixed 6 incorrect flag names, added 15 undocumented flags, added 6 missing commands
+
+### Changed
+
+- **CI**: Removed `msrv-mcp` job; simplified MSRV to single 1.80 check
+- **Release**: Removed xlex-mcp from packaging pipeline
+- **README**: MCP Server section replaced with AI Agent Integration
+
 ## [0.2.4] - 2026-02-03
 
 ### Fixed
@@ -63,7 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-platform support (Linux, macOS, Windows)
 - Installation via cargo, brew, npm, curl
 
-[Unreleased]: https://github.com/yen0304/xlex/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/yen0304/xlex/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/yen0304/xlex/compare/v0.2.4...v0.3.0
 [0.2.4]: https://github.com/yen0304/xlex/compare/v0.2.0...v0.2.4
 [0.2.0]: https://github.com/yen0304/xlex/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/yen0304/xlex/releases/tag/v0.1.0

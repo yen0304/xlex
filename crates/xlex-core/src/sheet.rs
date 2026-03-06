@@ -276,6 +276,26 @@ impl Sheet {
         &self.merged_ranges
     }
 
+    /// Returns an iterator over all row heights (row -> height).
+    pub fn row_heights(&self) -> &std::collections::HashMap<u32, f64> {
+        &self.row_heights
+    }
+
+    /// Returns an iterator over all column widths (col -> width).
+    pub fn column_widths(&self) -> &std::collections::HashMap<u32, f64> {
+        &self.column_widths
+    }
+
+    /// Returns the set of hidden rows.
+    pub fn hidden_rows(&self) -> &std::collections::HashSet<u32> {
+        &self.hidden_rows
+    }
+
+    /// Returns the set of hidden columns.
+    pub fn hidden_columns(&self) -> &std::collections::HashSet<u32> {
+        &self.hidden_columns
+    }
+
     /// Adds a merged range.
     pub fn add_merged_range(&mut self, range: crate::range::Range) {
         self.merged_ranges.push(range);

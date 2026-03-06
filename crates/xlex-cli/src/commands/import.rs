@@ -412,6 +412,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_parse_value_number() {
         assert_eq!(parse_value("42"), CellValue::Number(42.0));
         assert_eq!(parse_value("3.14"), CellValue::Number(3.14));

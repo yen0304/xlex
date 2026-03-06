@@ -95,14 +95,13 @@ jobs:
           fail_ci_if_error: false
 
   msrv:
-    name: MSRV (core & cli) - Rust 1.80
+    name: MSRV - Rust 1.80
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.80.0
       - uses: Swatinem/rust-cache@v2
-      - name: Exclude xlex-mcp from workspace (requires Rust 1.88+)
-        run: sed -i '/"crates\/xlex-mcp",/d' Cargo.toml
+
       - name: Generate MSRV-compatible lockfile
         run: |
           cargo generate-lockfile
@@ -117,16 +116,6 @@ jobs:
       - name: Check MSRV for core & cli
         run: cargo check --all-features -p xlex-core -p xlex-cli
 
-  msrv-mcp:
-    name: MSRV (mcp) - Rust 1.88
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.88.0
-      - uses: Swatinem/rust-cache@v2
-      - name: Check MSRV for mcp
-        run: cargo check --all-features -p xlex-mcp
-
   security:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -136,3 +125,25 @@ jobs:
         run: cargo install cargo-audit
       - name: Security audit
         run: cargo audit
+
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run benchmarks
+        run: cargo bench -p xlex-core -- --output-format bencher | tee output.txt
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: cargo
+          output-file-path: output.txt
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: dev/bench
+          auto-push: true
+          alert-threshold: "150%"
+          comment-on-alert: true
+          fail-on-alert: false

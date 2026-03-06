@@ -261,8 +261,53 @@ impl XlexError {
     }
 
     /// Returns the exit code to use when this error causes program termination.
+    ///
+    /// Maps internal error codes to documented exit codes (0-15).
+    /// See docs/reference/exit-codes.md for the full mapping.
     pub fn exit_code(&self) -> i32 {
-        self.code() as i32
+        match self.code() {
+            // 0 = SUCCESS (not an error)
+            ErrorCode::FileNotFound => 3,
+            ErrorCode::FileExists => 3,
+            ErrorCode::PermissionDenied => 4,
+            ErrorCode::InvalidExtension => 5,
+            ErrorCode::IoError => 11,
+
+            ErrorCode::ParseError
+            | ErrorCode::InvalidZipStructure
+            | ErrorCode::MissingRequiredEntry
+            | ErrorCode::InvalidXml
+            | ErrorCode::EncodingError => 5,
+
+            ErrorCode::InvalidReference
+            | ErrorCode::InvalidRange
+            | ErrorCode::ReferenceOutOfBounds => 6,
+
+            ErrorCode::SheetNotFound
+            | ErrorCode::SheetAlreadyExists
+            | ErrorCode::InvalidSheetName
+            | ErrorCode::SheetIndexOutOfBounds
+            | ErrorCode::CannotDeleteLastSheet => 7,
+
+            ErrorCode::CellNotFound | ErrorCode::InvalidCellValue => 6,
+
+            ErrorCode::InvalidFormula | ErrorCode::CircularReference => 8,
+
+            ErrorCode::StyleNotFound | ErrorCode::InvalidStyle => 1,
+
+            ErrorCode::OperationFailed
+            | ErrorCode::InvalidOperation
+            | ErrorCode::UnsupportedOperation => 1,
+
+            ErrorCode::TemplateParseError
+            | ErrorCode::TemplateRenderError
+            | ErrorCode::InvalidTemplateData => 9,
+
+            ErrorCode::ConfigError | ErrorCode::InvalidConfig => 10,
+
+            ErrorCode::InternalError => 1,
+            ErrorCode::NotImplemented => 1,
+        }
     }
 
     /// Returns a recovery suggestion for this error.
@@ -427,7 +472,7 @@ mod tests {
             path: PathBuf::from("test.xlsx"),
         };
         assert_eq!(err.code(), ErrorCode::FileNotFound);
-        assert_eq!(err.exit_code(), 1);
+        assert_eq!(err.exit_code(), 3);
     }
 
     #[test]
@@ -892,13 +937,20 @@ mod tests {
 
     #[test]
     fn test_exit_codes() {
-        // Verify exit codes match error code values
+        // Verify exit codes match documented values (0-15 scheme)
         assert_eq!(
             XlexError::FileNotFound {
                 path: PathBuf::from("test")
             }
             .exit_code(),
-            1
+            3
+        );
+        assert_eq!(
+            XlexError::PermissionDenied {
+                path: PathBuf::from("test")
+            }
+            .exit_code(),
+            4
         );
         assert_eq!(
             XlexError::ParseError {
@@ -906,64 +958,72 @@ mod tests {
                 location: "test".to_string()
             }
             .exit_code(),
-            10
+            5
         );
         assert_eq!(
             XlexError::InvalidReference {
                 reference: "test".to_string()
             }
             .exit_code(),
-            20
+            6
         );
         assert_eq!(
             XlexError::SheetNotFound {
                 name: "test".to_string()
             }
             .exit_code(),
-            30
+            7
         );
         assert_eq!(
-            XlexError::CellNotFound {
-                reference: "test".to_string()
+            XlexError::InvalidFormula {
+                formula: "test".to_string(),
+                reason: "test".to_string()
             }
             .exit_code(),
-            40
-        );
-        assert_eq!(XlexError::StyleNotFound { id: 0 }.exit_code(), 50);
-        assert_eq!(
-            XlexError::OperationFailed {
-                message: "test".to_string()
-            }
-            .exit_code(),
-            60
+            8
         );
         assert_eq!(
             XlexError::TemplateParseError {
                 message: "test".to_string()
             }
             .exit_code(),
-            70
+            9
         );
         assert_eq!(
             XlexError::ConfigError {
                 message: "test".to_string()
             }
             .exit_code(),
-            80
+            10
+        );
+        assert_eq!(
+            XlexError::IoError {
+                message: "test".to_string(),
+                source: None,
+            }
+            .exit_code(),
+            11
+        );
+        assert_eq!(
+            XlexError::OperationFailed {
+                message: "test".to_string()
+            }
+            .exit_code(),
+            1
         );
         assert_eq!(
             XlexError::InternalError {
                 message: "test".to_string()
             }
             .exit_code(),
-            90
+            1
         );
         assert_eq!(
             XlexError::NotImplemented {
                 feature: "test".to_string()
             }
             .exit_code(),
-            99
+            1
         );
     }
 }

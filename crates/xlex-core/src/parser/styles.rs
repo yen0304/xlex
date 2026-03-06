@@ -461,7 +461,7 @@ mod tests {
 
     #[test]
     fn test_default_trait() {
-        let parser = StylesParser::default();
+        let parser = StylesParser::new();
         let xml = r#"<?xml version="1.0"?><styleSheet></styleSheet>"#;
         let registry = parser.parse(Cursor::new(xml)).unwrap();
         assert_eq!(registry.fonts().len(), 0);
@@ -615,8 +615,7 @@ mod tests {
 
         // Parser should handle malformed XML somehow
         // The behavior depends on quick_xml's error handling
-        if result.is_ok() {
-            let registry = result.unwrap();
+        if let Ok(registry) = result {
             assert!(registry.fonts().is_empty());
         }
     }

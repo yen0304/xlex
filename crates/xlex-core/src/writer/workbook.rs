@@ -51,8 +51,45 @@ impl WorkbookWriter {
             .compression_method(zip::CompressionMethod::Deflated)
             .compression_level(Some(6));
 
-        // Write [Content_Types].xml
-        self.write_content_types(&mut zip, workbook, options)?;
+        // Pre-scan sheets for comments and hyperlinks
+        let mut sheets_with_comments: Vec<usize> = Vec::new();
+        for (index, sheet_name) in workbook.sheet_names().iter().enumerate() {
+            if let Some(sheet) = workbook.get_sheet(sheet_name) {
+                let has_comments = sheet.cells().any(|c| c.comment.is_some());
+                if has_comments {
+                    sheets_with_comments.push(index + 1);
+                }
+            }
+        }
+
+        // Build shared string table from all cells across all sheets
+        let mut ss_table: Vec<String> = Vec::new();
+        let mut ss_map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+
+        for sheet_name in workbook.sheet_names() {
+            if let Some(sheet) = workbook.get_sheet(sheet_name) {
+                for cell in sheet.cells() {
+                    if let CellValue::String(ref s) = cell.value {
+                        if !ss_map.contains_key(s) {
+                            let idx = ss_table.len();
+                            ss_map.insert(s.clone(), idx);
+                            ss_table.push(s.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        let has_shared_strings = !ss_table.is_empty();
+
+        // Write [Content_Types].xml (with comment info)
+        self.write_content_types(
+            &mut zip,
+            workbook,
+            &sheets_with_comments,
+            has_shared_strings,
+            options,
+        )?;
 
         // Write _rels/.rels
         self.write_root_rels(&mut zip, options)?;
@@ -64,7 +101,7 @@ impl WorkbookWriter {
         self.write_core_props(&mut zip, workbook, options)?;
 
         // Write xl/_rels/workbook.xml.rels
-        self.write_workbook_rels(&mut zip, workbook, options)?;
+        self.write_workbook_rels(&mut zip, workbook, has_shared_strings, options)?;
 
         // Write xl/workbook.xml
         self.write_workbook_xml(&mut zip, workbook, options)?;
@@ -72,9 +109,9 @@ impl WorkbookWriter {
         // Write xl/styles.xml and get style ID mapping
         let style_id_map = self.write_styles(&mut zip, workbook, options)?;
 
-        // Write xl/sharedStrings.xml if needed
-        if !workbook.shared_strings().is_empty() {
-            self.write_shared_strings(&mut zip, workbook, options)?;
+        // Write xl/sharedStrings.xml
+        if has_shared_strings {
+            self.write_shared_strings_from_table(&mut zip, &ss_table, options)?;
         }
 
         // Write sheets
@@ -86,6 +123,7 @@ impl WorkbookWriter {
                 index + 1,
                 options,
                 &style_id_map,
+                &ss_map,
             )?;
         }
 
@@ -97,6 +135,8 @@ impl WorkbookWriter {
         &self,
         zip: &mut ZipWriter<W>,
         workbook: &Workbook,
+        sheets_with_comments: &[usize],
+        has_shared_strings: bool,
         options: SimpleFileOptions,
     ) -> XlexResult<()> {
         zip.start_file("[Content_Types].xml", options)?;
@@ -114,7 +154,7 @@ impl WorkbookWriter {
         );
 
         // Add shared strings if present
-        if !workbook.shared_strings().is_empty() {
+        if has_shared_strings {
             content.push_str(r#"    <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
 "#);
         }
@@ -126,6 +166,19 @@ impl WorkbookWriter {
 "#,
                 index + 1
             ));
+        }
+
+        // Add comment content types
+        if !sheets_with_comments.is_empty() {
+            content.push_str(r#"    <Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/>
+"#);
+            for &sheet_num in sheets_with_comments {
+                content.push_str(&format!(
+                    r#"    <Override PartName="/xl/comments{}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml"/>
+"#,
+                    sheet_num
+                ));
+            }
         }
 
         content.push_str("</Types>");
@@ -225,6 +278,7 @@ impl WorkbookWriter {
         &self,
         zip: &mut ZipWriter<W>,
         workbook: &Workbook,
+        has_shared_strings: bool,
         options: SimpleFileOptions,
     ) -> XlexResult<()> {
         zip.start_file("xl/_rels/workbook.xml.rels", options)?;
@@ -254,7 +308,7 @@ impl WorkbookWriter {
         ));
 
         // Shared strings relationship if present
-        if !workbook.shared_strings().is_empty() {
+        if has_shared_strings {
             let strings_rid = styles_rid + 1;
             content.push_str(&format!(
                 r#"    <Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
@@ -704,24 +758,23 @@ impl WorkbookWriter {
         Ok(style_id_map)
     }
 
-    fn write_shared_strings<W: Write + std::io::Seek>(
+    fn write_shared_strings_from_table<W: Write + std::io::Seek>(
         &self,
         zip: &mut ZipWriter<W>,
-        workbook: &Workbook,
+        ss_table: &[String],
         options: SimpleFileOptions,
     ) -> XlexResult<()> {
         zip.start_file("xl/sharedStrings.xml", options)?;
 
-        let strings = workbook.shared_strings();
         let mut content = format!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="{}" uniqueCount="{}">
 "#,
-            strings.len(),
-            strings.len()
+            ss_table.len(),
+            ss_table.len()
         );
 
-        for s in strings {
+        for s in ss_table {
             content.push_str(&format!("    <si><t>{}</t></si>\n", escape_xml(s)));
         }
 
@@ -738,6 +791,7 @@ impl WorkbookWriter {
         sheet_number: usize,
         options: SimpleFileOptions,
         style_id_map: &std::collections::HashMap<u32, u32>,
+        ss_map: &std::collections::HashMap<String, usize>,
     ) -> XlexResult<()> {
         let sheet = workbook
             .get_sheet(sheet_name)
@@ -750,9 +804,45 @@ impl WorkbookWriter {
         let mut content = String::from(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-    <sheetData>
 "#,
         );
+
+        // Write column widths and hidden columns
+        let col_widths = sheet.column_widths();
+        let hidden_cols = sheet.hidden_columns();
+        if !col_widths.is_empty() || !hidden_cols.is_empty() {
+            // Collect all columns that need a <col> element
+            let mut all_cols: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+            for &c in col_widths.keys() {
+                all_cols.insert(c);
+            }
+            for &c in hidden_cols {
+                all_cols.insert(c);
+            }
+
+            content.push_str("    <cols>\n");
+            for col in &all_cols {
+                let width = col_widths.get(col).copied().unwrap_or(8.43); // Default Excel width
+                let hidden_attr = if hidden_cols.contains(col) {
+                    r#" hidden="1""#
+                } else {
+                    ""
+                };
+                let custom_width = if col_widths.contains_key(col) {
+                    r#" customWidth="1""#
+                } else {
+                    ""
+                };
+                content.push_str(&format!(
+                    r#"        <col min="{}" max="{}" width="{}"{}{}/>"#,
+                    col, col, width, hidden_attr, custom_width
+                ));
+                content.push('\n');
+            }
+            content.push_str("    </cols>\n");
+        }
+
+        content.push_str("    <sheetData>\n");
 
         // Collect cells by row
         let mut rows: std::collections::BTreeMap<u32, Vec<&crate::cell::Cell>> =
@@ -762,21 +852,39 @@ impl WorkbookWriter {
             rows.entry(cell.reference.row).or_default().push(cell);
         }
 
+        // Also ensure rows with height or hidden state but no cells are included
+        let row_heights = sheet.row_heights();
+        let hidden_rows = sheet.hidden_rows();
+        for &r in row_heights.keys() {
+            rows.entry(r).or_default();
+        }
+        for &r in hidden_rows {
+            rows.entry(r).or_default();
+        }
+
         // Write rows
-        for (row_num, cells) in rows {
-            content.push_str(&format!(r#"        <row r="{}">"#, row_num));
+        for (row_num, cells) in &rows {
+            let mut row_attrs = format!(r#"        <row r="{}""#, row_num);
+
+            // Add row height if set
+            if let Some(height) = row_heights.get(row_num) {
+                row_attrs.push_str(&format!(r#" ht="{}" customHeight="1""#, height));
+            }
+
+            // Add hidden attribute if set
+            if hidden_rows.contains(row_num) {
+                row_attrs.push_str(r#" hidden="1""#);
+            }
+
+            content.push_str(&row_attrs);
+            content.push('>');
 
             // Sort cells by column
-            let mut sorted_cells = cells;
+            let mut sorted_cells = cells.clone();
             sorted_cells.sort_by_key(|c| c.reference.col);
 
             for cell in sorted_cells {
                 let cell_ref = cell.reference.to_a1();
-                let (cell_type, cell_value) = self.format_cell_value(&cell.value);
-
-                let type_attr = cell_type
-                    .map(|t| format!(r#" t="{}""#, t))
-                    .unwrap_or_default();
 
                 // Map cell's style_id to cellXfs index using the mapping
                 let style_attr = cell
@@ -787,6 +895,10 @@ impl WorkbookWriter {
 
                 match &cell.value {
                     CellValue::Formula { formula, .. } => {
+                        let (cell_type, cell_value) = self.format_cell_value(&cell.value);
+                        let type_attr = cell_type
+                            .map(|t| format!(r#" t="{}""#, t))
+                            .unwrap_or_default();
                         content.push_str(&format!(
                             r#"<c r="{}"{}{}><f>{}</f>{}</c>"#,
                             cell_ref,
@@ -801,16 +913,20 @@ impl WorkbookWriter {
                     CellValue::Empty => {
                         // Skip empty cells
                     }
-                    CellValue::String(_) => {
-                        // inlineStr type requires <is><t>...</t></is> format
-                        if let Some(value) = cell_value {
+                    CellValue::String(s) => {
+                        // Use shared string table reference
+                        if let Some(&idx) = ss_map.get(s) {
                             content.push_str(&format!(
-                                r#"<c r="{}"{}{}><is><t>{}</t></is></c>"#,
-                                cell_ref, type_attr, style_attr, value
+                                r#"<c r="{}" t="s"{}><v>{}</v></c>"#,
+                                cell_ref, style_attr, idx
                             ));
                         }
                     }
                     _ => {
+                        let (cell_type, cell_value) = self.format_cell_value(&cell.value);
+                        let type_attr = cell_type
+                            .map(|t| format!(r#" t="{}""#, t))
+                            .unwrap_or_default();
                         if let Some(value) = cell_value {
                             content.push_str(&format!(
                                 r#"<c r="{}"{}{}><v>{}</v></c>"#,
@@ -839,9 +955,136 @@ impl WorkbookWriter {
             content.push_str("</mergeCells>\n");
         }
 
+        // Collect hyperlinks from cells
+        let mut hyperlinks: Vec<(&str, String)> = Vec::new();
+        for cell in sheet.cells() {
+            if let Some(ref url) = cell.hyperlink {
+                hyperlinks.push((url.as_str(), cell.reference.to_a1()));
+            }
+        }
+
+        if !hyperlinks.is_empty() {
+            content.push_str("    <hyperlinks>\n");
+            for (idx, (_url, cell_ref)) in hyperlinks.iter().enumerate() {
+                let rid = format!("rHl{}", idx + 1);
+                content.push_str(&format!(
+                    r#"        <hyperlink ref="{}" r:id="{}"/>"#,
+                    cell_ref, rid
+                ));
+                content.push('\n');
+            }
+            content.push_str("    </hyperlinks>\n");
+        }
+
         content.push_str("</worksheet>");
 
         zip.write_all(content.as_bytes())?;
+
+        // Write sheet relationship file for hyperlinks
+        if !hyperlinks.is_empty() {
+            let rels_path = format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_number);
+            zip.start_file(rels_path, options)?;
+
+            let mut rels_content = String::from(
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+"#,
+            );
+
+            for (idx, (url, _)) in hyperlinks.iter().enumerate() {
+                let rid = format!("rHl{}", idx + 1);
+                rels_content.push_str(&format!(
+                    r#"    <Relationship Id="{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="{}" TargetMode="External"/>
+"#,
+                    rid,
+                    escape_xml(url)
+                ));
+            }
+
+            rels_content.push_str("</Relationships>");
+            zip.write_all(rels_content.as_bytes())?;
+        }
+
+        // Write comments if any cells have them
+        let mut comments: Vec<(String, String)> = Vec::new();
+        for cell in sheet.cells() {
+            if let Some(ref comment) = cell.comment {
+                comments.push((cell.reference.to_a1(), comment.clone()));
+            }
+        }
+
+        if !comments.is_empty() {
+            // Write comments XML
+            let comments_path = format!("xl/comments{}.xml", sheet_number);
+            zip.start_file(&comments_path, options)?;
+
+            let mut comment_xml = String::from(
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+    <authors><author>xlex</author></authors>
+    <commentList>
+"#,
+            );
+
+            for (cell_ref, text) in &comments {
+                comment_xml.push_str(&format!(
+                    r#"        <comment ref="{}" authorId="0"><text><t>{}</t></text></comment>
+"#,
+                    cell_ref,
+                    escape_xml(text)
+                ));
+            }
+
+            comment_xml.push_str("    </commentList>\n</comments>");
+            zip.write_all(comment_xml.as_bytes())?;
+
+            // Write VML drawing for comment shapes (required by Excel)
+            let vml_path = format!("xl/drawings/vmlDrawing{}.vml", sheet_number);
+            zip.start_file(&vml_path, options)?;
+
+            let mut vml = String::from(
+                r#"<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="1"/></o:shapelayout>
+<v:shapetype id="_x0000_t202" coordsize="21600,21600" o:spt="202" path="m,l,21600r21600,l21600,xe">
+<v:stroke joinstyle="miter"/><v:path gradientshapeok="t" o:connecttype="rect"/>
+</v:shapetype>
+"#,
+            );
+
+            for (idx, (cell_ref, _)) in comments.iter().enumerate() {
+                // Parse cell ref to get row/col for positioning
+                if let Ok(cr) = crate::cell::CellRef::parse(cell_ref) {
+                    let col = cr.col.saturating_sub(1);
+                    let row = cr.row.saturating_sub(1);
+                    vml.push_str(&format!(
+                        "<v:shape id=\"_x0000_s{}\" type=\"#_x0000_t202\" \
+                         style=\"position:absolute;margin-left:59.25pt;margin-top:1.5pt;\
+                         width:108pt;height:59.25pt;z-index:{};visibility:hidden\" \
+                         fillcolor=\"#ffffe1\" o:insetmode=\"auto\">\
+                         <v:fill color2=\"#ffffe1\"/>\
+                         <v:shadow on=\"t\" color=\"black\" obscured=\"t\"/>\
+                         <v:textbox/><x:ClientData ObjectType=\"Note\">\
+                         <x:MoveWithCells/><x:SizeWithCells/>\
+                         <x:Anchor>{}, 15, {}, 10, {}, 31, {}, 4</x:Anchor>\
+                         <x:AutoFill>False</x:AutoFill>\
+                         <x:Row>{}</x:Row><x:Column>{}</x:Column>\
+                         </x:ClientData></v:shape>\n",
+                        1025 + idx,
+                        idx + 1,
+                        col,
+                        row,
+                        col + 2,
+                        row + 4,
+                        row,
+                        col
+                    ));
+                }
+            }
+
+            vml.push_str("</xml>");
+            zip.write_all(vml.as_bytes())?;
+        }
+
         Ok(())
     }
 
@@ -921,7 +1164,7 @@ mod tests {
 
     #[test]
     fn test_default_trait() {
-        let _writer = WorkbookWriter::default();
+        let _writer = WorkbookWriter::new();
     }
 
     #[test]
@@ -981,9 +1224,9 @@ mod tests {
     #[test]
     fn test_format_cell_value_number_decimal() {
         let writer = WorkbookWriter::new();
-        let (t, v) = writer.format_cell_value(&CellValue::Number(3.14159));
+        let (t, v) = writer.format_cell_value(&CellValue::Number(1.23456));
         assert!(t.is_none());
-        assert_eq!(v, Some("3.14159".to_string()));
+        assert_eq!(v, Some("1.23456".to_string()));
     }
 
     #[test]
