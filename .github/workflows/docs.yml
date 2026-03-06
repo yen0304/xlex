@@ -32,17 +32,15 @@ jobs:
 
       - name: Install MkDocs
         run: |
-          pip install mkdocs-material mkdocs-minify-plugin
+          pip install "mkdocs-material<10" mkdocs-minify-plugin
 
       - name: Build documentation
-        run: |
-          cd docs
-          mkdocs build --strict
+        run: mkdocs build --strict
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/site
+          path: site
 
   deploy:
     environment:

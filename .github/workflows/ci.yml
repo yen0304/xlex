@@ -143,6 +143,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Run benchmarks
         run: cargo bench -p xlex-core --bench benchmarks 2>&1 | tee output.txt
+        env:
+          CARGO_TERM_COLOR: never
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:

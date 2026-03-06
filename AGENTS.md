@@ -25,7 +25,7 @@ Git hooks auto-run tests, fmt check, and clippy. Use `--no-verify` only when CI 
 
 - MSRV job generates a fresh lockfile and pins transitive deps (see ci.yml `Generate MSRV-compatible lockfile` step)
 - Benchmark job uses **Criterion** (`tool: criterionrs` in github-action-benchmark)
-- Docs job runs `mkdocs build --strict` from `docs/` directory
+- Docs job runs `mkdocs build --strict` from repo root (`mkdocs.yml` is at root, `docs_dir` defaults to `docs/`)
 
 ## Agent Skill Files (IMPORTANT)
 
