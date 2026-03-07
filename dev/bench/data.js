@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772853487791,
+  "lastUpdate": 1772859185257,
   "repoUrl": "https://github.com/yen0304/xlex",
   "entries": {
     "Benchmark": [
@@ -454,6 +454,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "lazy_stream_rows_10k",
             "value": 8800300,
+            "range": "± 0",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "yen0304@users.noreply.github.com",
+            "name": "yen0304",
+            "username": "yen0304"
+          },
+          "committer": {
+            "email": "yen0304@users.noreply.github.com",
+            "name": "yen0304",
+            "username": "yen0304"
+          },
+          "distinct": true,
+          "id": "f7672aae1728b18a2141b26d05e7cb66102f1e9e",
+          "message": "fix: escape angle brackets in doc comments for rustdoc -D warnings",
+          "timestamp": "2026-03-07T12:47:25+08:00",
+          "tree_id": "2d723ca08ad60566863f105d66d14f95bc9133df",
+          "url": "https://github.com/yen0304/xlex/commit/f7672aae1728b18a2141b26d05e7cb66102f1e9e"
+        },
+        "date": 1772859185019,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "workbook_open_1k_rows",
+            "value": 1388600,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sheet_list",
+            "value": 11,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cell_get_single",
+            "value": 39,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cell_set_single",
+            "value": 221,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "row_append/100",
+            "value": 72898,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "row_append/1000",
+            "value": 194030,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "row_append/10000",
+            "value": 1315700,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "range_read_100_cells",
+            "value": 1287,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "workbook_save/100",
+            "value": 518610,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "workbook_save/1000",
+            "value": 2644200,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "workbook_save/5000",
+            "value": 12798000,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cell_ref_parse_simple",
+            "value": 25,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cell_ref_parse_complex",
+            "value": 38,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "range_parse",
+            "value": 74,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lazy_stream_rows_10k",
+            "value": 8770300,
             "range": "± 0",
             "unit": "ns/iter"
           }
