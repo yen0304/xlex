@@ -82,27 +82,58 @@ xlex convert input.csv output.xlsx
 
 ## Session Mode
 
-For large files (>10MB), session mode loads the file once and keeps it in memory for faster repeated operations:
+### Batch writes (recommended for automation & AI tools)
+
+Open a file once, make multiple changes, save once. Each command is a separate CLI call — perfect for scripts and AI agents.
 
 ```bash
 # Start a session
-xlex session report.xlsx
+xlex open report.xlsx
 
-# In session mode:
+# Apply batch commands (each is a separate CLI call)
+xlex batch -c "cell set Sheet1 A1 Revenue"
+xlex batch -c "cell set Sheet1 B1 Q1"
+xlex batch -c "row append Sheet1 Product A,50000,55000"
+xlex batch -c "sheet add Summary"
+
+# Check session status
+xlex status
+
+# Save all changes back to original file
+xlex commit
+
+# Or discard all changes
+xlex close
+```
+
+Or pipe multiple commands in one shot (fastest):
+
+```bash
+xlex batch report.xlsx <<'EOF'
+cell set Sheet1 A1 "Revenue"
+cell set Sheet1 B1 "Q1"
+row append Sheet1 "Product A,50000,55000"
+sheet add Summary
+cell set Summary A1 "Total"
+EOF
+```
+
+### Interactive REPL
+
+For large files (>10MB), REPL mode loads the file once for fast repeated reads:
+
+```bash
+# Start a REPL session
+xlex repl report.xlsx
+
+# In REPL mode:
 session> info      # Show workbook information
 session> sheets    # List all sheets
 session> cell Sheet1 A1        # Get cell value
-session> cell Sheet1 B2:D5     # Get range values
 session> row Sheet1 1          # Get row values
 session> search revenue        # Search across all sheets
-session> search error Sheet1   # Search in specific sheet
-session> exit      # Exit session mode
+session> exit      # Exit
 ```
-
-**Benefits:**
-- File is loaded only once at session start
-- Subsequent commands execute instantly
-- Ideal for exploring large workbooks interactively
 
 ## Updating
 

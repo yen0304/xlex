@@ -28,6 +28,9 @@ cobertura.xml
 *.tar.gz
 *.zip
 
+# xlex session working directory
+.xlex/
+
 # Logs
 *.log
 /logs/

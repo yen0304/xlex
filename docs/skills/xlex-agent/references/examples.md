@@ -12,6 +12,7 @@ Real-world patterns for common Excel automation tasks. Each example shows a comp
 - [Multi-sheet dashboard](#multi-sheet-dashboard)
 - [Safe editing workflow](#safe-editing-workflow)
 - [Bulk data entry](#bulk-data-entry)
+- [Batch write workflow (recommended for AI tools)](#batch-write-workflow-recommended-for-ai-tools)
 - [Search and find data](#search-and-find-data)
 
 ---
@@ -285,6 +286,52 @@ EOF
 
 # Option 3: Import from existing data file
 xlex import json records.json data.xlsx -s Imported
+```
+
+## Batch write workflow (recommended for AI tools)
+
+Use `xlex open` / `xlex batch` / `xlex commit` for efficient multi-write operations.
+This opens the file once, applies all changes in memory, and saves once.
+
+```bash
+# === Option A: Session mode (persistent, AI-tool friendly) ===
+# Each command is a separate CLI invocation — perfect for AI tools.
+
+xlex open report.xlsx                                # start session
+
+# Multiple batch commands, each modifying the working copy
+xlex batch -c "cell set Sheet1 A1 Revenue"
+xlex batch -c "cell set Sheet1 B1 Q1"
+xlex batch -c "cell set Sheet1 C1 Q2"
+xlex batch -c "row append Sheet1 Product A,50000,55000"
+xlex batch -c "row append Sheet1 Product B,30000,35000"
+xlex batch -c "sheet add Summary"
+xlex batch -c "cell set Summary A1 Total"
+
+xlex status                                          # check session info
+xlex commit                                          # save all changes back to report.xlsx
+
+# === Option B: Pipe (single invocation, fastest) ===
+
+xlex batch report.xlsx <<'EOF'
+# Comments are supported
+cell set Sheet1 A1 "Revenue"
+cell set Sheet1 B1 "Q1"
+cell set Sheet1 C1 "Q2"
+row append Sheet1 "Product A,50000,55000"
+row append Sheet1 "Product B,30000,35000"
+sheet add Summary
+cell set Summary A1 "Total"
+EOF
+
+# === Option C: Script file ===
+
+xlex batch report.xlsx -s commands.txt               # read from file
+
+# === Discard changes instead of saving ===
+xlex open data.xlsx
+xlex batch -c "cell set Sheet1 A1 oops"
+xlex close                                           # discard, original unchanged
 ```
 
 ## Search and find data

@@ -8,6 +8,7 @@ mod import;
 mod range;
 mod row;
 mod search;
+pub mod session;
 mod sheet;
 mod style;
 mod template;
@@ -153,6 +154,19 @@ pub enum Commands {
     /// Search for text across all sheets (like Ctrl+F in Excel)
     Search(search::SearchArgs),
 
+    // Session management (open → operate → commit)
+    /// Open a workbook for editing (creates a session)
+    Open(OpenArgs),
+
+    /// Save session changes back to the original file
+    Commit,
+
+    /// Discard session changes and close
+    Close,
+
+    /// Show current session status
+    Status,
+
     // Utility commands
     /// Generate shell completion scripts
     Completion(CompletionArgs),
@@ -160,7 +174,7 @@ pub enum Commands {
     /// Display or modify configuration
     Config(ConfigArgs),
 
-    /// Execute batch commands from file or stdin
+    /// Execute batch commands on a workbook (single open/save cycle)
     Batch(BatchArgs),
 
     /// Manage command aliases
@@ -173,6 +187,7 @@ pub enum Commands {
     Interactive,
 
     /// Start a session with a pre-loaded workbook (faster for large files)
+    #[command(name = "repl")]
     Session(SessionArgs),
 
     /// Show examples for commands
@@ -223,12 +238,27 @@ pub struct CompletionArgs {
     pub shell: clap_complete::Shell,
 }
 
+/// Open arguments.
+#[derive(Parser)]
+pub struct OpenArgs {
+    /// Path to the Excel file to open
+    pub file: std::path::PathBuf,
+}
+
 /// Batch execution arguments.
 #[derive(Parser)]
 pub struct BatchArgs {
-    /// Read commands from file (use - for stdin)
-    #[arg(short, long)]
+    /// Path to the Excel file (optional if a session is active)
     pub file: Option<std::path::PathBuf>,
+
+    /// Read commands from a script file (default: stdin)
+    #[arg(short = 's', long = "script")]
+    pub script: Option<std::path::PathBuf>,
+
+    /// Inline command to execute (can be repeated)
+    #[arg(short = 'c', long = "command")]
+    pub commands: Vec<String>,
+
     /// Continue executing on error
     #[arg(long)]
     pub continue_on_error: bool,
@@ -351,6 +381,12 @@ impl Cli {
 
             // Search
             Commands::Search(args) => search::run(args, &self.global),
+
+            // Session management
+            Commands::Open(args) => run_open(args, &self.global),
+            Commands::Commit => run_commit(&self.global),
+            Commands::Close => run_close(&self.global),
+            Commands::Status => run_status(&self.global),
 
             // Utility
             Commands::Completion(args) => run_completion(args),
@@ -720,27 +756,172 @@ csv_quote: '\"'
     Ok(())
 }
 
+fn run_open(args: &OpenArgs, global: &GlobalOptions) -> Result<()> {
+    use colored::Colorize;
+
+    let state = session::open(&args.file)?;
+
+    if !global.quiet {
+        if global.format == OutputFormat::Json {
+            let json = serde_json::json!({
+                "action": "open",
+                "original": state.original_path,
+                "working": state.working_path,
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            println!(
+                "{} {}",
+                "Opened".bold().green(),
+                state.original_path.display()
+            );
+            println!(
+                "Working copy: {}",
+                state.working_path.display().to_string().dimmed()
+            );
+            println!();
+            println!(
+                "Run commands with  {}",
+                "xlex batch -c \"cell set Sheet1 A1 hello\"".cyan()
+            );
+            println!(
+                "Or pipe commands   {}",
+                "echo 'cell set Sheet1 A1 hello' | xlex batch".cyan()
+            );
+            println!("Save changes with  {}", "xlex commit".cyan());
+            println!("Discard with       {}", "xlex close".cyan());
+        }
+    }
+
+    Ok(())
+}
+
+fn run_commit(global: &GlobalOptions) -> Result<()> {
+    use colored::Colorize;
+
+    let state = session::commit()?;
+
+    if !global.quiet {
+        if global.format == OutputFormat::Json {
+            let json = serde_json::json!({
+                "action": "commit",
+                "file": state.original_path,
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            println!(
+                "{} Changes saved to {}",
+                "Committed".bold().green(),
+                state.original_path.display()
+            );
+        }
+    }
+
+    Ok(())
+}
+
+fn run_close(global: &GlobalOptions) -> Result<()> {
+    use colored::Colorize;
+
+    let state = session::close()?;
+
+    if !global.quiet {
+        if global.format == OutputFormat::Json {
+            let json = serde_json::json!({
+                "action": "close",
+                "file": state.original_path,
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            println!(
+                "{} Changes discarded for {}",
+                "Closed".bold().yellow(),
+                state.original_path.display()
+            );
+        }
+    }
+
+    Ok(())
+}
+
+fn run_status(global: &GlobalOptions) -> Result<()> {
+    use colored::Colorize;
+
+    match session::load() {
+        Some(state) => {
+            if global.format == OutputFormat::Json {
+                let json = serde_json::json!({
+                    "active": true,
+                    "original": state.original_path,
+                    "working": state.working_path,
+                    "opened_at": state.opened_at,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                println!("{}", "Session active".bold().green());
+                println!("  File:       {}", state.original_path.display());
+                println!(
+                    "  Working:    {}",
+                    state.working_path.display().to_string().dimmed()
+                );
+                println!("  Opened at:  {}", state.opened_at);
+            }
+        }
+        None => {
+            if global.format == OutputFormat::Json {
+                let json = serde_json::json!({ "active": false });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                println!("{}", "No active session".dimmed());
+                println!("Run {} to start", "xlex open <file>".cyan());
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn run_batch(args: &BatchArgs, global: &GlobalOptions) -> Result<()> {
     use colored::Colorize;
-    use std::io::BufRead;
+    use xlex_core::Workbook;
 
-    let reader: Box<dyn std::io::BufRead> = if let Some(ref path) = args.file {
-        if path.to_string_lossy() == "-" {
-            Box::new(std::io::BufReader::new(std::io::stdin()))
-        } else {
-            let file = std::fs::File::open(path)?;
-            Box::new(std::io::BufReader::new(file))
-        }
+    // Resolve the workbook file: explicit arg > active session
+    let file_path = if let Some(ref f) = args.file {
+        f.clone()
+    } else if let Some(state) = session::load() {
+        state.working_path.clone()
     } else {
-        Box::new(std::io::BufReader::new(std::io::stdin()))
+        anyhow::bail!(
+            "No file specified and no active session.\n\
+             Usage: xlex batch <file> or xlex open <file> first."
+        );
     };
+
+    // Collect commands from: inline -c args, script file, or stdin
+    let commands: Vec<String> = if !args.commands.is_empty() {
+        args.commands.clone()
+    } else {
+        use std::io::BufRead;
+        let reader: Box<dyn std::io::BufRead> = if let Some(ref path) = args.script {
+            let file = std::fs::File::open(path)
+                .map_err(|e| anyhow::anyhow!("Cannot open script '{}': {}", path.display(), e))?;
+            Box::new(std::io::BufReader::new(file))
+        } else {
+            Box::new(std::io::BufReader::new(std::io::stdin()))
+        };
+        reader.lines().collect::<Result<Vec<_>, _>>()?
+    };
+
+    // Open workbook ONCE
+    let mut workbook = Workbook::open(&file_path)
+        .map_err(|e| anyhow::anyhow!("Failed to open '{}': {}", file_path.display(), e))?;
 
     let mut errors: Vec<(usize, String, String)> = Vec::new();
     let mut success_count = 0;
+    let mut modified = false;
 
-    for (line_num, line_result) in reader.lines().enumerate() {
-        let line = line_result?;
-        let line = line.trim();
+    for (line_num, raw_line) in commands.iter().enumerate() {
+        let line = raw_line.trim();
 
         // Skip empty lines and comments
         if line.is_empty() || line.starts_with('#') {
@@ -751,58 +932,47 @@ fn run_batch(args: &BatchArgs, global: &GlobalOptions) -> Result<()> {
             println!("{} {}: {}", "[BATCH]".blue(), line_num + 1, line);
         }
 
-        // Parse and execute the command
-        // For simplicity, we'll execute using a subprocess
-        let output = std::process::Command::new("sh")
-            .arg("-c")
-            .arg(format!("xlex {}", line))
-            .output();
-
-        match output {
-            Ok(out) => {
-                if out.status.success() {
-                    success_count += 1;
-                    if !global.quiet && !out.stdout.is_empty() {
-                        print!("{}", String::from_utf8_lossy(&out.stdout));
-                    }
-                } else {
-                    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-                    errors.push((line_num + 1, line.to_string(), stderr.clone()));
-
-                    if !args.continue_on_error {
-                        anyhow::bail!(
-                            "Command failed at line {}: {}\n{}",
-                            line_num + 1,
-                            line,
-                            stderr
-                        );
-                    }
+        match execute_batch_command(&mut workbook, line) {
+            Ok(msg) => {
+                success_count += 1;
+                modified = true;
+                if !global.quiet && !msg.is_empty() {
+                    println!("  {} {}", "✓".green(), msg);
                 }
             }
             Err(e) => {
-                errors.push((line_num + 1, line.to_string(), e.to_string()));
+                let err_msg = e.to_string();
+                if !global.quiet {
+                    eprintln!(
+                        "  {} Line {}: {} — {}",
+                        "✗".red(),
+                        line_num + 1,
+                        line,
+                        err_msg
+                    );
+                }
+                errors.push((line_num + 1, line.to_string(), err_msg));
                 if !args.continue_on_error {
-                    anyhow::bail!("Failed to execute command at line {}: {}", line_num + 1, e);
+                    anyhow::bail!("Command failed at line {}: {}", line_num + 1, line);
                 }
             }
         }
     }
 
+    // Save ONCE if any command succeeded
+    if modified {
+        workbook
+            .save()
+            .map_err(|e| anyhow::anyhow!("Failed to save: {}", e))?;
+    }
+
     if !global.quiet {
         println!(
-            "\n{}: {} commands executed, {} failed",
+            "\n{}: {} succeeded, {} failed",
             "Batch complete".bold(),
-            success_count,
-            errors.len()
+            success_count.to_string().green(),
+            errors.len().to_string().red()
         );
-
-        if !errors.is_empty() {
-            println!("\n{}:", "Errors".red());
-            for (line, cmd, err) in &errors {
-                println!("  Line {}: {}", line, cmd);
-                println!("    {}", err.trim().dimmed());
-            }
-        }
     }
 
     if !errors.is_empty() && !args.continue_on_error {
@@ -810,6 +980,180 @@ fn run_batch(args: &BatchArgs, global: &GlobalOptions) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Parse and execute a single batch command against an open workbook.
+///
+/// Supported commands:
+///   cell set <sheet> <cell> <value>
+///   cell clear <sheet> <cell>
+///   cell formula <sheet> <cell> <formula>
+///   row append <sheet> <val1,val2,...>
+///   row insert <sheet> <row_num>
+///   row delete <sheet> <row_num>
+///   sheet add <name>
+///   sheet remove <name>
+///   sheet rename <old> <new>
+fn execute_batch_command(workbook: &mut xlex_core::Workbook, line: &str) -> Result<String> {
+    let parts = shell_words(line);
+    if parts.is_empty() {
+        return Ok(String::new());
+    }
+
+    let cmd = parts[0].to_lowercase();
+    let sub = parts.get(1).map(|s| s.to_lowercase()).unwrap_or_default();
+
+    match (cmd.as_str(), sub.as_str()) {
+        ("cell", "set") => {
+            // cell set <sheet> <cell> <value...>
+            if parts.len() < 5 {
+                anyhow::bail!("Usage: cell set <sheet> <cell> <value>");
+            }
+            let sheet = &parts[2];
+            let cell_str = &parts[3];
+            let value_str = parts[4..].join(" ");
+            let cell_ref = xlex_core::CellRef::parse(cell_str)?;
+            let value = cell::parse_auto_value(&value_str);
+            workbook.set_cell(sheet, cell_ref, value)?;
+            Ok(format!("cell {} = {}", cell_str, value_str))
+        }
+        ("cell", "clear") => {
+            if parts.len() < 4 {
+                anyhow::bail!("Usage: cell clear <sheet> <cell>");
+            }
+            let sheet = &parts[2];
+            let cell_str = &parts[3];
+            let cell_ref = xlex_core::CellRef::parse(cell_str)?;
+            workbook.clear_cell(sheet, &cell_ref)?;
+            Ok(format!("cleared {}", cell_str))
+        }
+        ("cell", "formula") => {
+            if parts.len() < 5 {
+                anyhow::bail!("Usage: cell formula <sheet> <cell> <formula>");
+            }
+            let sheet = &parts[2];
+            let cell_str = &parts[3];
+            let formula = parts[4..].join(" ");
+            let formula = formula.strip_prefix('=').unwrap_or(&formula);
+            let cell_ref = xlex_core::CellRef::parse(cell_str)?;
+            workbook.set_cell(sheet, cell_ref, xlex_core::CellValue::formula(formula))?;
+            Ok(format!("formula {} = ={}", cell_str, formula))
+        }
+        ("row", "append") => {
+            if parts.len() < 4 {
+                anyhow::bail!("Usage: row append <sheet> <val1,val2,...>");
+            }
+            let sheet_name = &parts[2];
+            let values_str = parts[3..].join(" ");
+            let sheet = workbook
+                .get_sheet_mut(sheet_name)
+                .ok_or_else(|| anyhow::anyhow!("Sheet '{}' not found", sheet_name))?;
+
+            // Find next row
+            let mut max_row: u32 = 0;
+            for cell in sheet.cells() {
+                if cell.reference.row > max_row {
+                    max_row = cell.reference.row;
+                }
+            }
+            let new_row = max_row + 1;
+
+            for (col, val) in values_str.split(',').enumerate() {
+                let cell_ref = xlex_core::CellRef::new((col + 1) as u32, new_row);
+                let value = cell::parse_auto_value(val.trim());
+                sheet.set_cell(cell_ref, value);
+            }
+            Ok(format!("appended row {}", new_row))
+        }
+        ("row", "insert") => {
+            if parts.len() < 4 {
+                anyhow::bail!("Usage: row insert <sheet> <row_num>");
+            }
+            let sheet_name = &parts[2];
+            let row_num: u32 = parts[3]
+                .parse()
+                .map_err(|_| anyhow::anyhow!("Invalid row number"))?;
+            let sheet = workbook
+                .get_sheet_mut(sheet_name)
+                .ok_or_else(|| anyhow::anyhow!("Sheet '{}' not found", sheet_name))?;
+            sheet.insert_rows(row_num, 1);
+            Ok(format!("inserted row at {}", row_num))
+        }
+        ("row", "delete") => {
+            if parts.len() < 4 {
+                anyhow::bail!("Usage: row delete <sheet> <row_num>");
+            }
+            let sheet_name = &parts[2];
+            let row_num: u32 = parts[3]
+                .parse()
+                .map_err(|_| anyhow::anyhow!("Invalid row number"))?;
+            let sheet = workbook
+                .get_sheet_mut(sheet_name)
+                .ok_or_else(|| anyhow::anyhow!("Sheet '{}' not found", sheet_name))?;
+            sheet.delete_rows(row_num, 1);
+            Ok(format!("deleted row {}", row_num))
+        }
+        ("sheet", "add") => {
+            if parts.len() < 3 {
+                anyhow::bail!("Usage: sheet add <name>");
+            }
+            let name = &parts[2];
+            workbook.add_sheet(name)?;
+            Ok(format!("added sheet '{}'", name))
+        }
+        ("sheet", "remove") => {
+            if parts.len() < 3 {
+                anyhow::bail!("Usage: sheet remove <name>");
+            }
+            let name = &parts[2];
+            workbook.remove_sheet(name)?;
+            Ok(format!("removed sheet '{}'", name))
+        }
+        ("sheet", "rename") => {
+            if parts.len() < 4 {
+                anyhow::bail!("Usage: sheet rename <old> <new>");
+            }
+            let old = &parts[2];
+            let new = &parts[3];
+            workbook.rename_sheet(old, new)?;
+            Ok(format!("renamed '{}' → '{}'", old, new))
+        }
+        _ => {
+            anyhow::bail!(
+                "Unknown batch command: '{} {}'\n\
+                 Supported: cell set|clear|formula, row append|insert|delete, sheet add|remove|rename",
+                cmd, sub
+            );
+        }
+    }
+}
+
+/// Simple shell-like word splitting that respects double quotes.
+fn shell_words(input: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let chars = input.chars();
+
+    for ch in chars {
+        match ch {
+            '"' => {
+                in_quotes = !in_quotes;
+            }
+            ' ' | '\t' if !in_quotes => {
+                if !current.is_empty() {
+                    words.push(std::mem::take(&mut current));
+                }
+            }
+            _ => {
+                current.push(ch);
+            }
+        }
+    }
+    if !current.is_empty() {
+        words.push(current);
+    }
+    words
 }
 
 fn get_alias_path() -> Result<std::path::PathBuf> {

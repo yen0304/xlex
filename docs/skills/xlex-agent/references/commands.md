@@ -13,7 +13,7 @@ Complete reference for all xlex CLI commands. Organized by domain.
 - [Style](#style)
 - [Formula](#formula)
 - [Template](#template)
-- [Search](#search)
+- [Search](#search)\n- [Session Management](#session-management)\n- [Batch](#batch)
 - [Import](#import)
 - [Export](#export)
 - [Update](#update)
@@ -252,6 +252,44 @@ xlex search <file> <pattern> [-s sheet] [-c column] [--case-sensitive] [-r] [-n 
 
 ---
 
+## Session Management
+
+Open a workbook for editing, batch operations, and commit/discard changes.
+
+```bash
+xlex open   <file>                             # Start a session (creates .xlex/ working copy)
+xlex status                                    # Show active session info
+xlex commit                                    # Save changes back to original file
+xlex close                                     # Discard changes and close session
+```
+
+## Batch
+
+Execute multiple write commands in a single open/save cycle. Works with or without a session.
+
+```bash
+xlex batch <file>                              # Read commands from stdin, apply to <file>
+xlex batch                                     # Read commands from stdin, use active session
+xlex batch -c "cell set Sheet1 A1 hi"          # Inline command (repeatable)
+xlex batch -s script.txt                       # Read commands from script file
+xlex batch <file> --continue-on-error          # Don't stop on first error
+```
+
+Supported batch commands:
+```
+cell set <sheet> <cell> <value>
+cell clear <sheet> <cell>
+cell formula <sheet> <cell> <formula>
+row append <sheet> <val1,val2,...>
+row insert <sheet> <row_num>
+row delete <sheet> <row_num>
+sheet add <name>
+sheet remove <name>
+sheet rename <old> <new>
+```
+
+---
+
 ## Import
 
 ```bash
@@ -298,18 +336,17 @@ xlex config set <key> <value>                  # Set config value
 xlex config reset                              # Reset configuration to defaults
 xlex config init                               # Initialize configuration file
 xlex config validate                           # Validate configuration file
-xlex batch -f <file> [--continue-on-error]     # Execute batch commands from file
 xlex alias list / add <name> <cmd> / remove <name>  # Manage aliases
 xlex examples [command] [--all]                # Show usage examples
 xlex man [--output-dir <dir>] [--all]          # Generate man pages
 xlex version                                   # Version information
 xlex interactive                               # Start REPL mode
-xlex session <file>                            # Interactive session (file preloaded in memory)
+xlex repl <file>                               # Interactive REPL (file preloaded in memory)
 ```
 
-### Session mode commands
+### REPL mode commands
 
-Inside `xlex session`, the following commands are available:
+Inside `xlex repl`, the following commands are available:
 
 ```
 info                      # Show workbook information
