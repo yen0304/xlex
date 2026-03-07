@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772853110228,
+  "lastUpdate": 1772853487791,
   "repoUrl": "https://github.com/yen0304/xlex",
   "entries": {
     "Benchmark": [
@@ -340,6 +340,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "lazy_stream_rows_10k",
             "value": 8960100,
+            "range": "± 0",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "yen0304@users.noreply.github.com",
+            "name": "yen0304",
+            "username": "yen0304"
+          },
+          "committer": {
+            "email": "yen0304@users.noreply.github.com",
+            "name": "yen0304",
+            "username": "yen0304"
+          },
+          "distinct": true,
+          "id": "12f5fa88e40d6f3a2ccb617e60b0b2a45e045c1f",
+          "message": "docs: update README with session management and batch workflow (EN/ZH-TW)\n\n- Add Session Management and Batch Writes to Features list\n- Replace old Session Mode section with:\n  - Session Management (open/commit/close/status)\n  - Batch Writes (inline -c, script -s, stdin pipe)\n  - Interactive REPL (read-only, renamed from session)\n- Add Session & Batch Commands reference section\n- Remove old batch from Utility Commands\n- Update both English and Traditional Chinese versions",
+          "timestamp": "2026-03-07T11:12:04+08:00",
+          "tree_id": "4d1f3371f071cc5d35a08b666d5acf0abd724016",
+          "url": "https://github.com/yen0304/xlex/commit/12f5fa88e40d6f3a2ccb617e60b0b2a45e045c1f"
+        },
+        "date": 1772853487509,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "workbook_open_1k_rows",
+            "value": 1397200,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sheet_list",
+            "value": 11,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cell_get_single",
+            "value": 40,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cell_set_single",
+            "value": 223,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "row_append/100",
+            "value": 72983,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "row_append/1000",
+            "value": 193870,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "row_append/10000",
+            "value": 1319600,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "range_read_100_cells",
+            "value": 1317,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "workbook_save/100",
+            "value": 507600,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "workbook_save/1000",
+            "value": 2685900,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "workbook_save/5000",
+            "value": 12860000,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cell_ref_parse_simple",
+            "value": 26,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cell_ref_parse_complex",
+            "value": 38,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "range_parse",
+            "value": 73,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lazy_stream_rows_10k",
+            "value": 8800300,
             "range": "± 0",
             "unit": "ns/iter"
           }
