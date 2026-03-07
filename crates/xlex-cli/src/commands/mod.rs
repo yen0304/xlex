@@ -985,15 +985,18 @@ fn run_batch(args: &BatchArgs, global: &GlobalOptions) -> Result<()> {
 /// Parse and execute a single batch command against an open workbook.
 ///
 /// Supported commands:
-///   cell set <sheet> <cell> <value>
-///   cell clear <sheet> <cell>
-///   cell formula <sheet> <cell> <formula>
-///   row append <sheet> <val1,val2,...>
-///   row insert <sheet> <row_num>
-///   row delete <sheet> <row_num>
-///   sheet add <name>
-///   sheet remove <name>
-///   sheet rename <old> <new>
+///
+/// ```text
+/// cell set <sheet> <cell> <value>
+/// cell clear <sheet> <cell>
+/// cell formula <sheet> <cell> <formula>
+/// row append <sheet> <val1,val2,...>
+/// row insert <sheet> <row_num>
+/// row delete <sheet> <row_num>
+/// sheet add <name>
+/// sheet remove <name>
+/// sheet rename <old> <new>
+/// ```
 fn execute_batch_command(workbook: &mut xlex_core::Workbook, line: &str) -> Result<String> {
     let parts = shell_words(line);
     if parts.is_empty() {
