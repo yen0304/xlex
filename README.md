@@ -28,6 +28,8 @@ AI coding agents (Copilot, Cursor, Claude Code, etc.) can run CLI commands but c
 
 - **Agent-Friendly**: Structured JSON output, deterministic exit codes, dry-run support
 - **Skill Files Included**: Ready-to-use [agent skill files](docs/skills/xlex-agent/) so agents know every command
+- **Session Management**: Git-like `open → batch → commit` workflow for multi-step edits
+- **Batch Writes**: In-process batch execution — single open/save cycle, ideal for AI agents
 - **Streaming Architecture**: Handle files up to 200MB without memory exhaustion
 - **Multiple Output Formats**: Text, JSON, CSV, NDJSON
 - **Template System**: Variable substitution with `{{placeholder}}` syntax
@@ -90,22 +92,74 @@ xlex template apply template.xlsx output.xlsx -D name="John" -D date="2026-01-15
 xlex interactive
 ```
 
-## Session Mode
+## Session Management
 
-For large files (>10MB), session mode loads the file once and keeps it in memory for faster repeated operations:
+xlex provides a **git-like workflow** for multi-step edits: `open → batch → commit`. This is the recommended approach for AI agents — no interactive REPL needed.
 
 ```bash
-# Start a session
-xlex session report.xlsx
+# Open a file for editing (creates a session)
+xlex open report.xlsx
 
-# In session mode, the prompt changes to:
+# Apply batch commands to the session
+xlex batch -c 'cell set Sheet1 A1 "Hello"' -c 'cell set Sheet1 B1 42'
+
+# Check session status
+xlex status
+
+# Save changes back to the original file
+xlex commit
+
+# Or discard changes
+xlex close
+```
+
+### Batch Writes
+
+The `batch` command executes multiple write operations in a **single open/save cycle** — no subprocess spawning, no repeated file I/O:
+
+```bash
+# Inline commands with -c
+xlex batch report.xlsx -c 'cell set Sheet1 A1 "Title"' -c 'row append Sheet1 a b c'
+
+# From a script file
+xlex batch report.xlsx -s commands.txt
+
+# Pipe from stdin
+echo 'cell set Sheet1 A1 "Hello"' | xlex batch report.xlsx
+
+# With active session (no file argument needed)
+xlex open report.xlsx
+xlex batch -c 'cell set Sheet1 A1 "Hello"' -c 'sheet add NewSheet'
+xlex commit
+```
+
+**Supported batch commands:**
+- `cell set <sheet> <ref> <value>` — Set cell value
+- `cell clear <sheet> <ref>` — Clear cell
+- `cell formula <sheet> <ref> <formula>` — Set formula
+- `row append <sheet> <values...>` — Append row
+- `row insert <sheet> <row>` — Insert empty row
+- `row delete <sheet> <row>` — Delete row
+- `sheet add <name>` — Add sheet
+- `sheet remove <name>` — Remove sheet
+- `sheet rename <old> <new>` — Rename sheet
+
+### Interactive REPL
+
+For exploring large files interactively, use the REPL (read-only):
+
+```bash
+# Start a REPL session
+xlex repl report.xlsx
+
+# In REPL mode:
 session> help      # Show available commands
 session> info      # Show workbook information
 session> sheets    # List all sheets
 session> cell Sheet1 A1        # Get cell value
 session> cell Sheet1 B2:D5     # Get range values
 session> row Sheet1 1          # Get row values
-session> exit      # Exit session mode
+session> exit      # Exit REPL
 ```
 
 **Benefits:**
@@ -113,32 +167,6 @@ session> exit      # Exit session mode
 - Subsequent commands execute instantly
 - Ideal for exploring large workbooks interactively
 - Supports JSON output with `--format json`
-
-**Example workflow:**
-```bash
-$ xlex session large_report.xlsx
-Loading workbook... Done (2.3s)
-
-Session Mode
-File: large_report.xlsx
-Sheets: 5
-
-session> sheets
-Sheets:
-  1. Summary
-  2. Data
-  3. Charts
-  4. Raw
-  5. Config
-
-session> cell Data A1:A10
-A1: Header
-A2: Value1
-...
-
-session> exit
-Goodbye!
-```
 
 ## AI Agent Integration
 
@@ -361,6 +389,18 @@ xlex info report.xlsx -f text    # Text output (default)
 | 6    | Sheet not found |
 | 7    | Cell reference error |
 
+## Session & Batch Commands
+
+```bash
+xlex open <file>                  # Open a workbook for editing (creates a session)
+xlex commit                       # Save session changes back to the original file
+xlex close                        # Discard session changes and close
+xlex status                       # Show current session status
+xlex batch [file] -c <cmd>        # Execute inline batch commands
+xlex batch [file] -s <script>     # Execute batch commands from script file
+xlex repl <file>                  # Start interactive REPL (read-only)
+```
+
 ## Utility Commands
 
 ```bash
@@ -368,7 +408,6 @@ xlex completion <shell>           # Generate shell completions (bash, zsh, fish,
 xlex config show                  # Show configuration
 xlex config get <key>             # Get config value
 xlex config set <key> <value>     # Set config value
-xlex batch -f <file>              # Execute batch commands from file
 xlex alias list                   # List command aliases
 xlex alias add <name> <command>   # Add alias
 xlex examples [command]           # Show command examples
