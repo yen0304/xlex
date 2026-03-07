@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-03-07
+
+### Added
+
+- **Session management**: Git-like `open → batch → commit` workflow for multi-step edits
+  - `xlex open <file>` — open a workbook for editing (creates `.xlex/` working directory)
+  - `xlex commit` — save session changes back to the original file
+  - `xlex close` — discard session changes
+  - `xlex status` — show current session status
+- **In-process batch execution**: `xlex batch` rewritten for single open/save cycle
+  - Inline commands with `-c`: `xlex batch -c 'cell set Sheet1 A1 "Hello"'`
+  - Script file with `-s`: `xlex batch -s commands.txt`
+  - Pipe from stdin: `echo '...' | xlex batch report.xlsx`
+  - Works with or without an active session
+  - Supports: `cell set/clear/formula`, `row append/insert/delete`, `sheet add/remove/rename`
+- **Self-update command**: `xlex update` to update to the latest version
+
+### Changed
+
+- **Interactive session renamed to REPL**: `xlex session` → `xlex repl` (read-only interactive mode)
+- **README updated**: Both English and Traditional Chinese READMEs now document session management and batch workflow
+
+### Fixed
+
+- **CI benchmark**: Removed debug step, re-triggered after gh-pages branch creation
+- **CI docs**: Fixed broken links, pinned mkdocs<2, fixed docs_dir configuration
+- **rustdoc**: Escaped angle brackets in doc comments to fix `cargo doc -D warnings`
+
 ## [0.3.1] - 2026-03-06
 
 ### Added
