@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772859185257,
+  "lastUpdate": 1772862577158,
   "repoUrl": "https://github.com/yen0304/xlex",
   "entries": {
     "Benchmark": [
@@ -568,6 +568,120 @@ window.BENCHMARK_DATA = {
           {
             "name": "lazy_stream_rows_10k",
             "value": 8770300,
+            "range": "± 0",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "yen0304@users.noreply.github.com",
+            "name": "yen0304",
+            "username": "yen0304"
+          },
+          "committer": {
+            "email": "yen0304@users.noreply.github.com",
+            "name": "yen0304",
+            "username": "yen0304"
+          },
+          "distinct": true,
+          "id": "42652664bd15e3e12abb47e4a304c37ecd532559",
+          "message": "chore: release v0.4.0 — session management and batch execution",
+          "timestamp": "2026-03-07T13:43:40+08:00",
+          "tree_id": "cf7ac93b96cc106d6caf7d3c749e2a329c4f9145",
+          "url": "https://github.com/yen0304/xlex/commit/42652664bd15e3e12abb47e4a304c37ecd532559"
+        },
+        "date": 1772862576350,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "workbook_open_1k_rows",
+            "value": 1385200,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "sheet_list",
+            "value": 11,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cell_get_single",
+            "value": 40,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cell_set_single",
+            "value": 220,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "row_append/100",
+            "value": 72399,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "row_append/1000",
+            "value": 194100,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "row_append/10000",
+            "value": 1310200,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "range_read_100_cells",
+            "value": 1286,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "workbook_save/100",
+            "value": 494410,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "workbook_save/1000",
+            "value": 2645500,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "workbook_save/5000",
+            "value": 12817000,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cell_ref_parse_simple",
+            "value": 25,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cell_ref_parse_complex",
+            "value": 38,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "range_parse",
+            "value": 74,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lazy_stream_rows_10k",
+            "value": 8611100,
             "range": "± 0",
             "unit": "ns/iter"
           }
